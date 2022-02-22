@@ -1,5 +1,6 @@
 #include <stdio.h>
 #include <stdlib.h>
+#include <float.h>
 #include "gp.h"
 
 tree *subtree_crossover(tree *p1, tree *p2, HashTable *to_table, const int max_dep) {
@@ -169,3 +170,257 @@ dag_node *copy_subtree_mutation(dag_node *node, HashTable *to_table, tree *stats
     return res_ptr;
 }
 
+
+tree *delete_mutation(tree *t, HashTable *to_table) {
+    return delete_mutation_d(t, to_table, (rand() % t->n_prims) + 1);
+}
+
+
+tree *delete_mutation_d(tree *t, HashTable *to_table, uint32_t c) {
+    tree *res_tree = create_tree();
+
+    if (t->n_prims > 0) {
+        res_tree->count = c;
+        res_tree->dag = copy_delete_mutation(t->dag, to_table, res_tree, 0);
+    } else {
+        printf(PREWARN"Cannot perform delete mutation: tree \"%s\" only has one node.\n", get_dag_expr(t->dag));
+        res_tree = copy_tree(t, to_table);
+    }
+
+    return res_tree;
+}
+
+
+dag_node *copy_delete_mutation(dag_node *node, HashTable *to_table, tree *stats, int dep) {
+    int primitive = node->primitive;
+    int arity = node->arity;
+
+    c_node children = {NULL};
+
+    int func = IS_FUNC(primitive, arity);
+    stats->count -= func;
+
+    if (!stats->count) {
+        //printf("Chosen promotion prim: %s\n", primitive_set[primitive].name);
+        stats->count = UINT_MAX;
+        stats->swap++;
+
+        int random_prim = (rand() % arity);
+        node = node->children.n[random_prim];
+        primitive = node->primitive;
+        arity = node->arity;
+    }
+
+    int old_swap = stats->swap;
+    COPY_NODE(arity, primitive, node, to_table, children,
+                copy_delete_mutation(node->children.n[i], to_table, stats, dep + 1));
+
+    IMPLEMENT_STATS(node, stats, dep, max, !func);
+    int ind = (stats->swap == old_swap) ? node->candid : -1;
+
+    return add_dag_node_index(to_table, primitive, children, ind);
+}
+
+
+tree *insert_mutation(tree *t, HashTable *to_table, const int max_dep) {
+    return insert_mutation_d(t, to_table, (rand() % (t->n_prims + t->n_terms)) + 1, All_Prims, max_dep);
+}
+
+
+tree *insert_mutation_d(tree *t, HashTable *to_table, uint32_t c, int m, const int max_dep) {
+    tree *res_tree = create_tree();
+    int p = get_prim_same_arity(0, 1, -1, 1);
+
+    if (p != -1) {
+        res_tree->count = c;
+        res_tree->mode = m;
+        res_tree->dag = copy_insert_mutation(t->dag, to_table, res_tree, 0, max_dep);
+    } else {
+        printf(PREERR"Cannot perform insert mutation: there is no function primitive with more than 0 arguments\n");
+        res_tree = copy_tree(t, to_table);
+    }
+
+    return res_tree;
+}
+
+
+dag_node *copy_insert_mutation(dag_node *node, HashTable *to_table, tree *stats, int dep, int max_dep) {
+    int primitive = node->primitive;
+    int arity = node->arity;
+    c_node children = {NULL};
+    dag_node *res_ptr = NULL;
+
+    int term = IS_TERM(primitive, arity);
+    stats->count -= SUBTRACT_CNT(term, stats->mode);
+    
+    if ((stats->count > 0) || (dep == max_dep)) {
+        int old_swap = stats->swap;
+        if (dep == max_dep && !term) {
+            int random_prim = (rand() % arity);
+            node = node->children.n[random_prim];
+            primitive = node->primitive;
+            arity = node->arity;
+            stats->depth = dep;
+        }
+        COPY_NODE(arity, primitive, node, to_table, children,
+                copy_insert_mutation(node->children.n[i], to_table, stats, dep + 1, max_dep));
+        IMPLEMENT_STATS(node, stats, dep, max, term);
+        int ind = (stats->swap == old_swap) ? node->candid : -1;
+
+        res_ptr = add_dag_node_index(to_table, primitive, children, ind);
+    } else {
+        stats->count = UINT_MAX;
+        stats->swap++;
+        
+        // chose a function prim that does not have 0 arguments
+        primitive = get_prim_same_arity(0, 1, -1, 1);
+        int new_arity = primitive_set[primitive].arity;
+        int node_slot = rand() % new_arity;
+
+        dag_node **child_ptr = alloc_child_ptrs(to_table, new_arity);
+        children.n = child_ptr;
+        for(int i = 0; i < new_arity; ++i) {
+            if (i == node_slot) {
+                *child_ptr++ = copy_insert_mutation(node, to_table, stats, dep + 1, max_dep);
+            } else {
+                tree dummy_tree = {0};
+                dag_node *term_node = GENERATE_TERMINAL(to_table, dummy_tree);
+                //fancy_dag_print(term_node);
+                *child_ptr++ = term_node;
+            }
+        }
+
+        stats->n_prims++;
+        stats->n_terms += new_arity - 1;
+        res_ptr = add_dag_node(to_table, primitive, children);
+    }
+
+    return res_ptr;
+}
+
+
+tree *point_mutation(tree *t, HashTable *to_table) {
+    return point_mutation_d(t, to_table, (rand() % (t->n_prims + t->n_terms)) + 1, All_Prims);
+}
+
+
+tree *point_mutation_d(tree *t, HashTable *to_table, uint32_t c, int m) {
+    tree *res_tree = create_tree();
+    res_tree->mode = m;
+    res_tree->count = c;
+
+    res_tree->dag = copy_point_mutation(t->dag, to_table, res_tree, 0);
+    return res_tree;
+}
+
+
+dag_node *copy_point_mutation(dag_node *node, HashTable *to_table, tree *stats, int dep) {
+    int primitive = node->primitive;
+    int arity = node->arity;
+    c_node children = {NULL};    
+
+    int term = IS_TERM(primitive, arity);
+    stats->count -= SUBTRACT_CNT(term, stats->mode);
+
+    int old_swap = stats->swap;
+    if (stats->count == 0) {
+        stats->count = UINT_MAX;
+        stats->swap++;
+
+        if (term) {
+            if (primitive == Scalar) {
+                GENERATE_SCALAR(to_table, arity, children);
+            } else {
+                int ptemp = get_prim_same_arity(primitive_set[Scalar].arity, 1, primitive, 0);
+                printf("got Prim: %d\n", ptemp);
+                if (ptemp != -1) {
+                    primitive = ptemp;
+                }
+            }
+            arity = 0; // COPY_NODE without effect
+
+        } else {
+            int ptemp = get_prim_same_arity(-1, 1, primitive, 1);
+
+            if (ptemp != -1) {
+                primitive = ptemp;
+                int new_arity = primitive_set[primitive].arity;
+
+                if (new_arity <= arity) {
+                    arity = new_arity;
+                } else {
+                    dag_node **child_ptr = alloc_child_ptrs(to_table, new_arity);
+                    children.n = child_ptr;
+                    for (int i = 0; i < arity; ++i) {
+                        *child_ptr++ = copy_point_mutation(node->children.n[i], to_table, stats, dep + 1);
+                    }
+                    tree dummy_tree = {0};
+                    for (int i = arity; i < new_arity; ++i) {
+                        *child_ptr++ = GENERATE_TERMINAL(to_table, dummy_tree);
+                    }
+                    stats->n_terms += new_arity - arity;
+                    arity = 0; // COPY_NODE without effect
+                }
+            }
+        }
+    }
+
+    COPY_NODE(arity, primitive, node, to_table, children,
+                copy_point_mutation(node->children.n[i], to_table, stats, dep + 1));
+
+    IMPLEMENT_STATS(node, stats, dep, max, term);
+    int ind = (stats->swap == old_swap) ? node->candid : -1;
+
+    return add_dag_node_index(to_table, primitive, children, ind);
+}
+
+
+tree* mutation(tree* parent, HashTable *t, int max_dep) {
+    int mutation_selector = rand() % DEFINED_MUTATIONS;
+    switch(mutation_selector) {
+        default:
+        case 0: return subtree_mutation(parent, t, max_dep);
+        case 1: return point_mutation(parent, t);
+        case 2: return delete_mutation(parent, t);
+        case 3: return insert_mutation(parent, t, max_dep);
+    }
+}
+
+
+tree *tournament(Engine *run, tree **population) {
+    #define TS_BEST_IN_POP(IND) do {                        \
+        float best_fit = FLT_MAX;                           \
+        for(int i = 0; i < size; ++i) {                     \
+            float fitness = population[IND]->fitness;       \
+            if(best_fit > fitness) {                        \
+                best_fit = fitness;                         \
+                best_ind = IND;                             \
+            }                                               \
+        }                                                   \
+    } while(0)
+
+
+    int n = run->pop_size;
+    int size = run->tournament_size;
+    if(size < 0) {
+        printf(PREERR"Tournament size below 0: %d, constraining size to 1.\n", size);
+        size = 1;
+    }
+    
+    int best_ind = -1;
+    if (size < n) {
+        int *indices = range_random_sample(n, size);
+        //PRINT_ARR(indices, size, "%d");
+        TS_BEST_IN_POP(indices[i]);
+        free(indices);
+    } else {
+        printf(PREERR"Tournament size above n (%d): %d, constraining size to n.\n", n, size);
+        TS_BEST_IN_POP(i);
+    }
+
+    if (best_ind <= -1) {
+        printf(PREERR"Tournament: Bad best fit index: %d\n", best_ind);
+    }
+    
+    return population[best_ind];
+}

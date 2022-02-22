@@ -5,14 +5,18 @@
 
 
 const Prim primitive_set[] = {
-    {"", 0, 0}, // placeholder for 0 ID
+    {"placeholder", 0, 0}, // placeholder for 0 ID
     {"scalar", 3, Scalar},
     {"x", 0, X},
     {"y", 0, Y},
     {"add", 2, Add},
     {"sub", 2, Sub},
     {"div", 2, Div},
-    {"mul", 2, Mul}
+    {"mul", 2, Mul},
+    {"sin", 1, Cos},
+    {"cos", 1, Sin},
+    {"tan", 1, Tan},
+    {"if", 3, If}
 };
 
 
@@ -122,13 +126,7 @@ dag_node *generate_program_w(HashTable *table, int method, int depth, int limit_
         primitive = (rand() % TSET_LEN) + 1;
         
         if (primitive == Scalar) {
-            arity = primitive_set[primitive].arity;
-
-            float *scalar_ptr = alloc_scalar_ptrs(table, arity);
-            children.f = scalar_ptr;
-            for (int i = 0; i < arity; ++i) {
-                *scalar_ptr++ = (rand_float() * DELTA_SCALAR) + MIN_SCALAR;
-            }
+            GENERATE_SCALAR(table, arity, children);
         }
 
         stats->depth = min(depth, stats->depth);
@@ -232,48 +230,6 @@ dag_node *str_to_dag(HashTable *table, const char **strp, int depth, tree *stats
 }
 
 
-// primitive can be set to -1 if you want to allow all primitives of that arity
-int get_prim_same_arity(uint32_t primitive, int arity) {
-    if (primitive == Scalar) {
-        return Scalar;
-    }
-
-#define PRIM_TYPE int
-
-    PRIM_TYPE *candidates;
-    if (PSET_LEN < STACK_ALLOC) {
-        candidates = (PRIM_TYPE *)alloca(PSET_LEN * sizeof(*candidates));
-    } else {
-        candidates = (PRIM_TYPE *)malloc(PSET_LEN * sizeof(*candidates));
-    }
-
-    int index = 0;
-    int term = IS_TERM(primitive, arity);
-    PRIM_TYPE start, end;
-    if (term) {
-        start = PSET_START;
-        end = TSET_END;
-    } else {
-        start = TSET_END;
-        end = PSET_END;
-    }
-
-    for(PRIM_TYPE i = start; i <= end; ++i) {
-        if (primitive_set[i].arity == arity && i != primitive) {
-            candidates[index++] = i;
-        }
-    }
-
-    int chosen_one = candidates[(rand() % index)];
-    if(PSET_LEN >= STACK_ALLOC) {
-        free(candidates);
-    }
-
-    return chosen_one;
-    #undef PRIM_TYPE
-}
-
-
 Prim *get_prim_index(const char *prim_str) {
     Prim* p;
     for(p = (Prim *)(primitive_set + 1); p < primitive_set + PSET_LEN && strcmp(prim_str, p->name); ++p);
@@ -337,6 +293,19 @@ void print_tree(tree *t, int print_stats, int do_fancy) {
         }
     } else {
         printf("Tree is Null.\n");
+    }
+}
+
+
+void print_population(tree **population, int n, int generation, int do_fancy) {
+    if(generation < 0) {
+        printf("\nIntial population:\n\n");
+    } else {
+        printf("\nPopulation of generation %d:\n\n", generation);
+    }
+    for(int i = 0; i < n; ++i) {
+        printf("Individual #%d:", i);
+        print_tree(population[i], 0, do_fancy);
     }
 }
 
@@ -442,4 +411,256 @@ tree **generate_population(HashTable *t, int method, int min_depth, int max_dept
     }
 
     return population;
+}
+
+
+// "exclude" - exclude mode
+// (0 -> include all primitives with that arity)
+// (1 -> exclude all primitives with that arity)
+// ignore_specific to ignore a specific primitive, ignore_specific = -1 if you do not wish to ignore anything
+// 
+// search_set - which sets to search on
+// (0 -> terminal set, only search for terminals)
+// (1 -> function set, only search for functions)
+// (>=2 -> search for both functions and terminals)
+PRIM_INDEX_TYPE *get_list_same_arity(int arity, int *n, int exclude, int ignore_specific, int search_set) {
+    PRIM_INDEX_TYPE *candidates = (PRIM_INDEX_TYPE *)malloc(PSET_LEN * sizeof(*candidates));
+
+    int index = 0;
+    PRIM_INDEX_TYPE start, end;
+    if (search_set == 0) {
+        start = PSET_START;
+        end = TSET_END;
+    } else if (search_set == 1) {
+        start = TSET_END + 1;
+        end = PSET_END;
+    } else {
+        start = PSET_START;
+        end = PSET_END;
+    }
+
+    for(PRIM_INDEX_TYPE i = start; i <= end; ++i) {
+        int p = primitive_set[i].arity;
+        if (((exclude == 0 && p == arity) ||
+             (exclude == 1 && p != arity)) && ignore_specific != i) {
+            //printf("adding candidate[%d]: %d\n", index, i);
+            candidates[index++] = i;
+        }
+    }
+
+    *n = index;
+    return candidates;
+}
+
+
+int get_prim_same_arity(int arity, int exclude, int ignore_specific, int search_set) {
+    int n;
+    PRIM_INDEX_TYPE *candidates = get_list_same_arity(arity, &n, exclude, ignore_specific, search_set);
+    int chosen_one = (n > 0) ? candidates[rand() % n] : -1;
+    free(candidates);
+    return chosen_one;
+}
+
+
+int cmp_tree(const void *a, const void *b) {
+    FIT_TYPE aval = (*(tree **)a)->fitness;
+    FIT_TYPE bval = (*(tree **)b)->fitness;
+    int res = (bval > aval) ? -1 : ((bval < aval) ? 1 : 0);
+    //printf("Comparing %.3f > %.3f for result %d\n", aval, bval, res);
+    return res;
+}
+
+
+tree **sort_k_min_trees(tree **array, int n, int size) {
+    tree **k_min = (tree **)malloc(size * sizeof(*k_min));
+    qsort(array, n, sizeof(tree *), cmp_tree);
+    //print_population(array, n, 0, 0);
+    memcpy(k_min, array, size * sizeof(tree *));
+    return k_min;
+}
+
+
+tree **get_k_min_trees(tree **arr, int n, int size) {
+    if (size) {
+        if (size < min(min(0.02*n + 260, 0.06*n + 40.0), 60000)) {
+            printf("Let yourself go!");
+            return sel_k_min_trees(arr, n, size);
+        } else {
+            return sort_k_min_trees(arr, n, size);
+        }
+    } else {
+        printf(PREERR"Got empty list of trees to order!\n");
+        return NULL;
+    }
+}
+
+
+tree **sel_k_min_trees(tree **arr, int n, int size) {
+    FIT_TYPE max_of_mins = FLT_MAX;
+    tree **k = (tree **)malloc((size + 1) * sizeof(tree *));
+
+    k[0] = arr[0];
+    for(int i = 1; i < n; ++i) {
+        int k_els = min(i, size);
+        FIT_TYPE cur_val = arr[i]->fitness;
+        
+        if (cur_val < max_of_mins) {
+            
+            int j;
+            if (cur_val > k[0]->fitness && cur_val < k[k_els - 1]->fitness) {
+                if (k_els > BINSEARCH_TRESHOLD) {
+                    int inc = k_els >> 1;
+                    j = inc;
+                    while (k[j]->fitness < cur_val || k[j - 1]->fitness > cur_val) {
+                        inc = (inc > 1) ? (inc >> 1) : 1;
+                        j += (cur_val < k[j]->fitness) ? -inc : inc;
+                    }
+                } else {
+                    for(j = 0; j < k_els && k[j]->fitness < cur_val; ++j) {}
+                }
+            } else {
+                if (cur_val <= k[0]->fitness) {
+                    j = 0;
+                } else {
+                    j = k_els;
+                }
+            }
+
+            memmove(k + j + 1, k + j, (size - j) * sizeof(*k));
+            k[j] = arr[i];
+
+            if (k_els == size) {
+                max_of_mins = k[size - 1]->fitness; 
+            }
+        }
+    }
+
+    return k;
+}
+
+
+void print_domain(FIT_TYPE *data, uint32_t n, const uint32_t *format) {
+    printf("\n%.3f ", data[0]);
+    for(int i = 1; i < n; ++i) {
+        int index = 0;
+        int divi = format[0];
+        while( (i % divi) == 0) {
+            divi *= format[++index];
+        }
+        for(int j = 0; j < (1 << (index - 1)); ++j) {
+            putchar('\n');
+        }
+        printf("%.3f ", data[i]);
+    }
+    printf("\n");
+}
+
+
+FIT_TYPE icompute_node_g(dag_node *t, const FIT_TYPE* cur_vars) {
+    switch(t->primitive) {
+        case X: default: return cur_vars[0];
+        case Y: return cur_vars[1];
+        case Scalar:
+            return t->children.f[0];
+        case Add: 
+            return icompute_node_g(t->children.n[0], cur_vars) + icompute_node_g(t->children.n[1], cur_vars);
+        case Sub: 
+            return icompute_node_g(t->children.n[0], cur_vars) - icompute_node_g(t->children.n[1], cur_vars);
+        case Div: {
+            FIT_TYPE c1 = icompute_node_g(t->children.n[0], cur_vars);
+            FIT_TYPE c2 = icompute_node_g(t->children.n[1], cur_vars);
+            return (c1 != 0.0 && c2 != 0.0) ? (c1 / c2) : 0.0;
+        }
+        case Mul:
+            return icompute_node_g(t->children.n[0],cur_vars) * icompute_node_g(t->children.n[1], cur_vars);
+        case Cos:
+            return cos(icompute_node_g(t->children.n[0],cur_vars));
+        case Sin:
+            return sin(icompute_node_g(t->children.n[0],cur_vars));
+        case Tan:
+            return tan(icompute_node_g(t->children.n[0],cur_vars));
+        case If: {
+            FIT_TYPE c1 = icompute_node_g(t->children.n[0], cur_vars);
+            FIT_TYPE c2 = icompute_node_g(t->children.n[1], cur_vars);
+            FIT_TYPE c3 = icompute_node_g(t->children.n[2], cur_vars);
+            return (c3 < 0) ? c1 : c2;
+        }
+    }
+}
+
+
+FIT_TYPE icompute_node_g_d(dag_node *t, const FIT_TYPE* cur_vars) {
+    FIT_TYPE result = icompute_node_g(t, cur_vars);
+    if (isinf(result) || isnan(result) || !isfinite(result)) {
+        //printf("Bad operation (%s) between values %.3f and %.3f\n", primitive_set[t->primitive].name, c1, c2);
+        printf("Bad operation (%s) between values: result: %.3f", primitive_set[t->primitive].name, result);
+    }
+    return result;
+}
+
+
+int calc_pop_fit(Engine *run, tree **population) {
+    float best_fit = FLT_MAX;
+    int best_ind = -1;
+    for(int i = 0; i < run->pop_size; ++i) {
+        float cur_fit = calc_tree_fit(run, population[i]);
+        //float cur_fit = no_tree_fit(population[i]);
+        if(cur_fit < best_fit) {
+            best_fit = cur_fit;
+            best_ind = i;
+        }
+    }
+    if (best_ind <= -1) {
+        printf(PREERR"Bad best index found while calculating fitness: %d\n", best_ind);
+    }
+    return best_ind;
+}
+
+
+FIT_TYPE no_tree_fit(tree *t) {
+    t->fitness = 0;
+    return 0;
+}
+
+
+FIT_TYPE calc_tree_fit(Engine *run, tree *t) {
+    /*if (ENABLE_CACHE) {
+        compute_domain_cache(t->dag);
+    } else {
+        icompute_domain_g(t->dag);
+    }*/
+
+    FIT_TYPE *domain = icompute_domain_g(run, t->dag);
+
+    //print_domain(domain, fitness_cases, resolution); //debug
+    t->fitness = icalculate_fitness_g(run, domain);
+    free(domain);
+    return t->fitness;
+}
+
+
+FIT_TYPE *icompute_domain_g(Engine *run, dag_node *t) {
+    int i;
+    FIT_TYPE cur_vars[DIMS];
+    FIT_TYPE *domain = (FIT_TYPE *)malloc(sizeof(*domain) * run->fitness_cases);
+    for(i = 0; i < DIMS; ++i) {
+        cur_vars[i] = run->MIN_DOMAIN[i];
+    }
+
+    for(i = 0; i < run->fitness_cases; ++i) {
+        domain[i] = icompute_node_g_d(t, cur_vars);
+        //domain[i] = icompute_node_g(t, cur_vars);
+
+        STEP_DOMAIN(run, cur_vars);
+    }
+    return domain;
+}
+
+
+FIT_TYPE icalculate_fitness_g(Engine *run, FIT_TYPE *values) {
+    float sq_sum = 0;
+    for(int i = 0; i < run->fitness_cases; ++i) {
+        sq_sum += pow(fabs(run->target[i] - values[i]), 2.0);
+    }
+    return sqrt(min(sq_sum, FLT_MAX) / (FIT_TYPE)(run->fitness_cases));
 }

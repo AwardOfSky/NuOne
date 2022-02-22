@@ -2,16 +2,18 @@
 #define UTILS_H
 
 #include <stdarg.h>
+#include <stdint.h>
 
 #define PREERR "[Error]:\t"
 #define PREWARN "[Warning]:\t"
 
+#define STACK_ALLOC 1024
+#define BINSEARCH_TRESHOLD 32
 
 #define max(a,b)                \
 ({ __typeof__ (a) _a = (a);     \
     __typeof__ (b) _b = (b);    \
     _a > _b ? _a : _b; })
-
 
 
 #define min(a,b)                \
@@ -25,7 +27,7 @@
     __typeof__ (b) _b = (b);    \
     __typeof__ (n) _n = (n);    \
     _b > _n ? ((_a < _n) ? _n : _a) : _b; })
-
+    
 
 #define PRINT_ARR(ARR, N, FORMAT) do {  \
     for(size_t i = 0; i < N; ++i) {     \
@@ -81,5 +83,8 @@
 float rand_float();
 int vasprintf(char **strp, const char *format, va_list ap);
 int asprintf(char **strp, const char *format, ...);
+uint32_t next_power_2(uint32_t n);
+int *range_random_sample(int n, int size);
+int *sel_k_min(int *arr, int n, int size);
 
 #endif

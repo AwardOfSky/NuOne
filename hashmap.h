@@ -34,7 +34,7 @@
         T->IND = slots;                                                                 \
                                                                                         \
         if (T->ARR < N_CHILDREN_ARR) {                                                  \
-            T->SIZE = min(T->SIZE * CHILDREN_ARR_RATIO, MAX_CHILD_SIZE);               \
+            T->SIZE = min(T->SIZE * CHILDREN_ARR_RATIO, MAX_CHILD_SIZE);                \
             T->PTRS[T->ARR] = (TYPE*)malloc(t->cur_child_arr_size * sizeof(TYPE));      \
         } else {                                                                        \
             printf(PREERR"Ran out of arrays to allocate pointers to childs ("MSG")\n"); \
