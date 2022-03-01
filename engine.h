@@ -2,7 +2,17 @@
 #define ENGINE_H
 
 #define DIMS 2
+#define INIT_MAX_GENS 1024
+#define STAT_ARRS 3
 
+
+// 32 bytes
+typedef struct Stats {
+    float *fit_hist[STAT_ARRS];
+    float *dep_hist[STAT_ARRS];
+    float *node_hist[STAT_ARRS];
+    size_t hist_len;
+} Stats;
 
 //TODO: add vars like gen and timers to the engine struct
 typedef struct Engine {
@@ -32,16 +42,25 @@ typedef struct Engine {
     float STEP[DIMS];
     float *target;
     uint32_t fitness_cases;
+    Stats *stats;
+    uint32_t best_ind_gen;
+    uint32_t cur_gen;
 } Engine;
+
 
 
 float pagie_poly(float x, float y);
 void set_default_params(Engine *params);
+void init_stats(Stats *stats);
+void free_stats(Stats *stats);
 Engine *create_params(int set_default);
 void setup(Engine *run, int cache_size);
 void print_params(Engine *run);
 void free_engine(Engine *run);
 void cleanup(Engine *run);
+uint64_t calculate_stats(Engine *run, tree **population);
+void print_gen_statistics(Engine *run, tree **population, double duration);
 int evolve(Engine *run);
+
 
 #endif

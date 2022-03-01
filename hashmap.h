@@ -12,6 +12,7 @@
 #define MAX_SCALAR_SIZE 1073741824
 #define MAX_CHILD_SIZE 1073741824
 #define N_CHILDREN_ARR 64
+#define INIT_HASHMAP_SIZE 65535
 
 //temp cache stuff
 #define OA_NODES 4
@@ -83,6 +84,7 @@ typedef struct HashTable {
 
 
 HashTable *create_hashtable(uint32_t n);
+void print_table_stats(b_node *table, int n, int do_extra_stats);
 void free_scalar_ptrs(HashTable *t);
 void free_child_ptrs(HashTable *t);
 void free_hashtable(HashTable *t);
@@ -94,5 +96,6 @@ float *alloc_scalar_ptrs(HashTable *t, int slots);
 uint32_t hash_dag_node(uint32_t primitive, int arity, c_node children);
 dag_node *add_dag_node(HashTable *t, uint32_t primitive, c_node children);
 dag_node *add_dag_node_index(HashTable *t, uint32_t primitive, c_node children, int ind);
+
 
 #endif

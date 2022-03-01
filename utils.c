@@ -1,6 +1,7 @@
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
+#include <math.h>
 #include "utils.h"
 
 
@@ -150,3 +151,9 @@ int *sel_k_min(int *arr, int n, int size) {
 
     return k;
 }
+
+//MAKE_COMPUTE_STD(int); // compute_std_int
+MAKE_COMPUTE_STD(float); // compute_std_float
+//MAKE_COMPUTE_MEAN(int); // compute_mean_int
+//MAKE_COMPUTE_MEAN(float); // compute_mean_float
+MAKE_REALLOC(float);

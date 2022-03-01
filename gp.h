@@ -70,6 +70,15 @@
 } while(0)
 
 
+#define PDEBUG 0
+#if PDEBUG
+    #define printfd(...) printf(__VA_ARGS__);
+#else
+    #define printfd(...)
+#endif
+
+
+
 // 16 bytes
 typedef struct Prim{
     char *name;
@@ -108,6 +117,7 @@ typedef struct tree {
 
 enum Gen_Methods {Grow = 0, Full = 1, Ramped = 2};
 enum Cnt_Methods {Primitives = 0, Terminals = 1, All_Prims = 2};
+enum Ind_Arrays {Average = 0, StandardDev = 1, Best = 2};
 
 enum PSet_IDs {Scalar = 1,
                 X = 2,
@@ -148,7 +158,7 @@ int get_prim_same_arity(int arity, int exclude, int ignore_specific, int search_
 char *get_dag_expr(dag_node *t);
 void print_tree(tree *t, int print_stats, int do_fancy);
 void print_population(tree **population, int n, int generation, int do_fancy);
-dag_node *get_dag_node_cnt(dag_node *node, uint32_t *count, int mode);
+dag_node *get_dag_node_cnt(dag_node *node, uint32_t *count, const int mode);
 int get_dag_node_dep(dag_node *node, int dep);
 dag_node *copy_dag_node(dag_node *node, HashTable *to_table);
 tree *copy_tree(tree *from, HashTable *to_table);

@@ -35,6 +35,71 @@ HashTable *create_hashtable(uint32_t n) {
 }
 
 
+void print_table_stats(b_node *table, int n, int do_extra_stats) {
+    int sum_slots = 0;
+    int max_slots = INT_MIN;
+    int min_slots = INT_MAX;
+    float *data_slots = (float *)malloc(n * sizeof(float));
+    int colisions = 0;
+    int unused_slots = 0;
+    int buckets_with_n[10] = {0};
+
+    for(int i = 0; i < n; ++i) {
+        b_node *cur = &table[i];
+        int slots = 0;
+        if (cur->node.primitive == 0) {
+            unused_slots++;
+            slots--;
+        }
+
+        while(cur != NULL) {
+            ++slots;   
+            cur = cur->next;
+        }
+
+        if (slots > 1) {
+            colisions += slots - 1;
+        }
+
+        if(do_extra_stats && slots < 10) {
+            buckets_with_n[slots]++;
+        }
+
+        data_slots[i] = (float)slots;
+        sum_slots += slots;
+        min_slots = min(min_slots, slots);
+        max_slots = max(max_slots, slots);
+    }
+    float mean_slots = (float)(sum_slots) / n;
+    float std_slots = compute_std_float(data_slots, n, sum_slots);
+
+    int alloced_mem = (sizeof(HashTable) + (n * sizeof(b_node))) + (sizeof(b_node) * sum_slots);
+    // print statistics
+    printf("\n======================================\n");
+    printf("Statistics of slots in each bucket: \n");
+    printf("Size of table: %d\n", n);
+    printf("%% of colisions: %.3f %%\n", ((double)colisions / (double)sum_slots) * 100.0);    
+    printf("Colisions: %d\n", colisions);
+    printf("Nodes: %d\n", sum_slots);
+    printf("Mean: %.3f\n", mean_slots);
+    printf("Std: %.3f\n", std_slots);
+    printf("Min: %d\n", min_slots);
+    printf("Max: %d\n", max_slots);
+    printf("Unused buckets/slots: %d (%d bytes)\n", unused_slots, unused_slots << 5);
+    printf("Memory allocated: %d bytes.\n", alloced_mem);
+    printf("%% of unused memory: %.3f %%\n", (float)(unused_slots << 5) / (float)(alloced_mem) * 100.0);
+    if (do_extra_stats) {
+        printf("Bucket stats:\n\n");
+        for(int i = 0; i < 10; ++i) {
+            printf("%d bucks with %d els\n", buckets_with_n[i], i);
+        }
+    }
+    printf("======================================\n\n");
+
+    free(data_slots);
+}
+
+
 void free_scalar_ptrs(HashTable *t) {
     FREE_PTRS(t, scalar_ptrs, scalar_arr);
 }

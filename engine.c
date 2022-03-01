@@ -1,7 +1,9 @@
 #include <stdio.h>
 #include <stdlib.h>
+#include <time.h>
+#include <float.h>
+#include <math.h>
 #include "gp.h"
-
 
 // fitness func
 float pagie_poly(float x, float y) {
@@ -22,13 +24,35 @@ void set_default_params(Engine *run) {
     run->init_depth.min = 1;
     run->init_depth.max = 15;
     run->debug = 0;
-    run->max_retries = 3;
-    run->initial_hashmap_size = 131071;
+    run->max_retries = 10;
+    run->initial_hashmap_size = INIT_HASHMAP_SIZE;
     run->elitism = 0.02;
     for (int i = 0; i < DIMS; ++i) {
         run->resolution[i] = 16;
         run->MIN_DOMAIN[i] = -1;
         run->MAX_DOMAIN[i] = 1;
+    }
+    run->cur_gen = 0;
+    run->stats = (Stats *)malloc(sizeof(*(run->stats)));
+    init_stats(run->stats);
+}
+
+
+void init_stats(Stats *stats) {
+    stats->hist_len = INIT_MAX_GENS;
+    for (int i = 0; i < STAT_ARRS; ++i) {
+        stats->dep_hist[i] = (float *)malloc(INIT_MAX_GENS * sizeof(*(stats->dep_hist[i])));
+        stats->fit_hist[i] = (float *)malloc(INIT_MAX_GENS * sizeof(*(stats->fit_hist[i])));
+        stats->node_hist[i] = (float *)malloc(INIT_MAX_GENS * sizeof(*(stats->node_hist[i])));
+    }
+}
+
+
+void free_stats(Stats *stats) {
+    for (int i = 0; i < STAT_ARRS; ++i) {
+        free(stats->dep_hist[i]);
+        free(stats->fit_hist[i]);
+        free(stats->node_hist[i]);
     }
 }
 
@@ -134,6 +158,8 @@ void print_params(Engine *run) {
 
 void free_engine(Engine *run) {
     // free(run->cache);
+    free_stats(run->stats);
+    free(run->stats);
     free(run);
 }
 
@@ -145,16 +171,71 @@ void cleanup(Engine *run) {
 }
 
 
-void print_gen_statistics(int gen, tree **population, int best_index) {
-    printf("[Gen %d]\tBest fitness: %f on index %d\n", gen, population[best_index]->fitness, best_index);
+uint64_t calculate_stats(Engine *run, tree **population) {
+    FIT_TYPE sum_fit = 0.0;
+    Stats *s = run->stats;
+    int sum_dep = 0;
+    int sum_nodes = 0;
+    int sum_prims = 0;
+    int n = run->pop_size;
+    int gen = run->cur_gen;
+
+    for(int i = 0; i < n; ++i) {
+        sum_fit += population[i]->fitness;
+        sum_dep += population[i]->depth;
+        sum_prims += population[i]->n_prims;
+        sum_nodes += population[i]->n_prims + population[i]->n_terms;
+    }
+    float mean_fit = (float)sum_fit / (float)(n);
+    float mean_dep = (float)sum_dep / (float)(n);
+    float mean_nodes = (float)sum_nodes / (float)(n);
+    float std_fit = 0.0;
+    float std_dep = 0.0;
+    float std_nodes = 0.0;
+
+    for(int i = 0; i < n; ++i) {
+        std_fit = pow(population[i]->fitness - mean_fit, 2);
+        std_dep = pow(population[i]->depth - mean_dep, 2);
+        std_nodes = pow((population[i]->n_terms + population[i]->n_prims) - mean_nodes, 2);
+    }
+
+
+    s->fit_hist[Average][gen] = mean_fit;
+    s->fit_hist[StandardDev][gen] = (float)sqrt(std_fit / (float)(n));
+    s->fit_hist[Best][gen] = population[run->best_ind_gen]->fitness;
+
+    s->dep_hist[Average][gen] = mean_dep;
+    s->dep_hist[StandardDev][gen] = (float)sqrt(std_dep / (float)(n));
+    s->dep_hist[Best][gen] = population[run->best_ind_gen]->depth;
+
+    s->node_hist[Average][gen] = mean_nodes;
+    s->node_hist[StandardDev][gen] = (float)sqrt(std_nodes / (float)(n));
+    s->node_hist[Best][gen] = population[run->best_ind_gen]->n_terms + population[run->best_ind_gen]->n_prims;
+    return run->fitness_cases * sum_prims;
 }
 
+
+void print_gen_statistics(Engine *run, tree **population, double duration) {
+    duration = max(FLT_MIN, duration);
+    uint64_t gpops = (uint64_t)((double)calculate_stats(run, population) / duration);
+    Stats *s = run->stats;
+    uint32_t g = run->cur_gen;
+    if (!g) {
+        printf("\n\n");
+        printf("[       |              FITNESS             |               DEPTH              |                     NODES                        | TIMINGS(s) ]\n");
+        printf("[  gen  |    avg    ,    std    ,   best   |    avg    ,    std    ,   best   |    avg    ,    std    ,   best   ,   GPops(/s)   |    eval    ]\n");
+    }
+    printf("[ %-6d| %-10.6f, %-10.6f, %-9.6f| %-10.6f, %-10.6f, %-9d| %-10.6f, %-10.6f, %-9d, %-14I64d| %-10.3f ]\n",
+        run->cur_gen, s->fit_hist[Average][g], s->fit_hist[StandardDev][g], s->fit_hist[Best][g],
+        s->dep_hist[Average][g], s->dep_hist[StandardDev][g], (int)(s->dep_hist[Best][g]),
+        s->node_hist[Average][g], s->node_hist[StandardDev][g], (int)(s->node_hist[Best][g]), gpops, duration);
+}
 
 
 int evolve(Engine *run) {
 
     // general run vars
-    int best_index;
+    clock_t engine_start = clock();
     int debug = run->debug;
     int elitism_n = run->elitism * run->pop_size;
     //if(debug) printf("Elitism n: %d\n", elitism_n);
@@ -163,10 +244,13 @@ int evolve(Engine *run) {
     HashTable *curt = create_hashtable(run->initial_hashmap_size);
     HashTable *newt;
 
+    double gen_duration;
     tree **population = generate_population(curt, run->gen_method,
-                                            run->init_depth.min, run->init_depth.min,
+                                            run->init_depth.min, run->init_depth.max,
                                             run->pop_size, run->term_prob);
+
     if (debug) print_population(population, run->pop_size, 0, 0);
+    
     tree **new_pop = (tree **)malloc(sizeof(tree *) * run->pop_size);
     tree **best_trees = (tree **)malloc(sizeof(tree *) * elitism_n);
 
@@ -183,56 +267,64 @@ int evolve(Engine *run) {
         }
     }
 
-
-    best_index = calc_pop_fit(run, population);
-    print_gen_statistics(0, population, best_index);
+    clock_t gen_start = clock();
+    run->best_ind_gen = calc_pop_fit(run, population);
+    gen_duration = ((double) (clock() - gen_start)) / CLOCKS_PER_SEC;
+    print_gen_statistics(run, population, gen_duration);
 
     //run for generations (only stop criteria for now)
-    for(int gen = 1; gen < run->generations; ++gen) {
+    for(run->cur_gen = 1; run->cur_gen < run->generations; run->cur_gen++) {
 
         // generate new hashtable
         uint32_t new_size = next_power_2(curt->n_nodes) - 1;
         newt = create_hashtable(new_size);
-        if (debug) printf("Generated new hashtable, size %d.\n", new_size);
+        if (PDEBUG) printf("Generated new hashtable, size %d.\n", new_size);
 
         // and insert best in next pop
         best_trees = get_k_min_trees(population, run->pop_size, elitism_n);
-        if (debug) {
+        if (PDEBUG) {
             printf("Best trees: ");
-            print_population(best_trees, elitism_n, gen, 0);
+            print_population(best_trees, elitism_n, run->cur_gen, 0);
         }
 
         for(int i = 0; i < elitism_n; ++i) {
+            if (PDEBUG) printf("Inserting elitist individuals in new generation\n");
             new_pop[i] = copy_tree(best_trees[i], newt);
         }
-        if (debug) printf("Inserting elitist individuals in new generation\n");
 
         // recombine remaining individuals
         for(int ind = elitism_n; ind < run->pop_size; ++ind) {
-            if (debug) printf("\nComputing individual %d\n", ind);
+            if (PDEBUG) printf("\nComputing individual %d\n", ind);
             int depth = -1;
             int retries = 0;
 
             tree *parent1;
             tree *indiv = NULL;
-            while ((depth > run->allowed_depth.max || depth < run->allowed_depth.min) && retries < 3) {
+            while ((depth > run->allowed_depth.max || depth < run->allowed_depth.min) && retries < run->max_retries) {
                 
                 parent1 = tournament(run, population);
-                if (debug) printf("Tournament sel for parent 1\n"); 
+
+                printfd("\nParent 1: ");
+                if (PDEBUG) print_tree(parent1, 0, 0);
 
                 int rng = rand_float();
                 if(rng < run->cross_rate) {
                     tree *parent2 = tournament(run, population);
-                    if (debug) printf("Tournament sel for parent 2\n"); 
+                    printfd("Parent 2: ");
+                    if (PDEBUG) print_tree(parent2, 0, 0);
                     indiv = subtree_crossover(parent1, parent2, newt, run->allowed_depth.max);
-                    if (debug) printf("Crossover\n"); 
+                    printfd("Crossover\n"); 
                 } else if (rng < run->mut_rate + run->cross_rate) {
                     indiv = mutation(parent1, newt, run->allowed_depth.max);
-                    if (debug) printf("Mutation\n"); 
+                    printfd("Mutation\n"); 
                 } else {
                     indiv = copy_tree(parent1, newt);
-                    if (debug) printf("Copy tree\n"); 
+                    printfd("Copy tree\n"); 
                 }
+
+
+                printfd("Resulting indiv: ");
+                if (PDEBUG) print_tree(indiv, 1, 0);
 
                 depth = indiv->depth;
                 ++retries;
@@ -244,7 +336,7 @@ int evolve(Engine *run) {
                 printf(PREERR"Evolve: Failed to generate individual index %d of new pop.\n", ind);
             }
 
-            if(debug) {
+            if (PDEBUG) {
                 printf("Retries for ind %d: %d\n", ind, retries);
                 //print_candidate_list(newt, 1);
                 //print_cache(0);
@@ -257,8 +349,10 @@ int evolve(Engine *run) {
             //build_cache(newt, gen);
             if (debug) printf("Building cache!\n");
         }
-        best_index = calc_pop_fit(run, new_pop);
-        print_gen_statistics(gen, new_pop, best_index);
+        gen_start = clock();
+        run->best_ind_gen = calc_pop_fit(run, new_pop);
+        gen_duration = ((double) (clock() - gen_start)) / CLOCKS_PER_SEC;
+        print_gen_statistics(run, new_pop, gen_duration);
 
         // advance hastable and delete current table
         HashTable *tempt = curt;
@@ -270,6 +364,11 @@ int evolve(Engine *run) {
         population = new_pop;
         new_pop = tempp;
     }
+
+    double engine_dur = ((double) (clock() - engine_start)) / CLOCKS_PER_SEC;
+    printf("\nBest individual (fitness %.3f): %s\n", population[run->best_ind_gen]->fitness, get_dag_expr(population[run->best_ind_gen]->dag));
+    printf("\nTotal engine time: %.3fs\n\n", engine_dur);
+
 
     return 0;
 }

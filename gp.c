@@ -47,7 +47,6 @@ void print_dag_node(dag_node *node) {
 }
 
 
-
 void fancy_dag_print(dag_node *t) {
     char *temp_arr = (char *)calloc(64, sizeof(char));
     fancy_dag_print_w(t, 0, temp_arr);
@@ -310,9 +309,12 @@ void print_population(tree **population, int n, int generation, int do_fancy) {
 }
 
 
-dag_node *get_dag_node_cnt(dag_node *node, uint32_t *count, int mode) {
+dag_node *get_dag_node_cnt(dag_node *node, uint32_t *count, const int mode) {
     dag_node *res_dag = node;
-    *count -= SUBTRACT_CNT(node, mode);
+
+    int term = IS_TERM(node->primitive, node->arity);
+    *count -= SUBTRACT_CNT(term, mode);
+    //printf("(Prim, count, var) : (%s %d %d)\n", primitive_set[node->primitive].name, *count, SUBTRACT_CNT(node, mode));
 
     if (!*count) {
         return node;
@@ -483,7 +485,6 @@ tree **sort_k_min_trees(tree **array, int n, int size) {
 tree **get_k_min_trees(tree **arr, int n, int size) {
     if (size) {
         if (size < min(min(0.02*n + 260, 0.06*n + 40.0), 60000)) {
-            printf("Let yourself go!");
             return sel_k_min_trees(arr, n, size);
         } else {
             return sort_k_min_trees(arr, n, size);
@@ -583,7 +584,7 @@ FIT_TYPE icompute_node_g(dag_node *t, const FIT_TYPE* cur_vars) {
             FIT_TYPE c1 = icompute_node_g(t->children.n[0], cur_vars);
             FIT_TYPE c2 = icompute_node_g(t->children.n[1], cur_vars);
             FIT_TYPE c3 = icompute_node_g(t->children.n[2], cur_vars);
-            return (c3 < 0) ? c1 : c2;
+            return (c3 < 0) ? c1 : c2;      
         }
     }
 }
@@ -634,6 +635,7 @@ FIT_TYPE calc_tree_fit(Engine *run, tree *t) {
 
     //print_domain(domain, fitness_cases, resolution); //debug
     t->fitness = icalculate_fitness_g(run, domain);
+    //printf("Fitness: %.6f\n", t->fitness); // debug
     free(domain);
     return t->fitness;
 }
@@ -649,7 +651,7 @@ FIT_TYPE *icompute_domain_g(Engine *run, dag_node *t) {
 
     for(i = 0; i < run->fitness_cases; ++i) {
         domain[i] = icompute_node_g_d(t, cur_vars);
-        //domain[i] = icompute_node_g(t, cur_vars);
+        //domain[i] = 0;
 
         STEP_DOMAIN(run, cur_vars);
     }
@@ -660,7 +662,7 @@ FIT_TYPE *icompute_domain_g(Engine *run, dag_node *t) {
 FIT_TYPE icalculate_fitness_g(Engine *run, FIT_TYPE *values) {
     float sq_sum = 0;
     for(int i = 0; i < run->fitness_cases; ++i) {
-        sq_sum += pow(fabs(run->target[i] - values[i]), 2.0);
+        sq_sum += pow(abs(run->target[i] - values[i]), 2.0);
     }
     return sqrt(min(sq_sum, FLT_MAX) / (FIT_TYPE)(run->fitness_cases));
 }

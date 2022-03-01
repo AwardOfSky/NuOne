@@ -9,7 +9,7 @@ tree *subtree_crossover(tree *p1, tree *p2, HashTable *to_table, const int max_d
     uint32_t count_p1 = (mode_p1 == Primitives && p1->n_prims > 0) ? ((rand() % p1->n_prims) + 1) : ((rand() % p1->n_terms) + 1);
     uint32_t count_p2 = (mode_p2 == Primitives && p2->n_prims > 0) ? ((rand() % p2->n_prims) + 1) : ((rand() % p2->n_terms) + 1);
     
-    //printf("cross (c1, c2, m1, m2, mdep) %d %d %d %d %d\n", count_p1, count_p2, mode_p1, mode_p2, UPPER_MAX_DEP);
+    printfd("cross (cp1, cp2, m1, m2, mdep) %d %d %d %d %d\n", count_p1, count_p2, mode_p1, mode_p2, max_dep);
     return subtree_crossover_d(p1, p2, to_table, count_p1, count_p2, mode_p1, mode_p2, max_dep);
 }
 
@@ -21,18 +21,23 @@ tree *subtree_crossover_d(tree *p1, tree *p2, HashTable *to_table, int c1, int c
         int mode_p2 = m2;
         uint32_t count_p2 = c2;
         tree *subtree_in_p2 = create_tree();
+
+        printfd("Tree in p2: %s\n", get_dag_expr(p2->dag));
+        printfd("(cp2, m2): (%d, %d)\n", count_p2, mode_p2);
         subtree_in_p2->dag = get_dag_node_cnt(p2->dag, &count_p2, mode_p2);
 
         if (subtree_in_p2->dag != NULL) {
             int subtree_dep = get_dag_node_dep(subtree_in_p2->dag, 0);
             subtree_in_p2->depth = subtree_dep;
-            //printf("Depth of subtree in p2: %d\n", subtree_dep);
+            
+            printfd("Depth of subtree in p2: %d\n", subtree_dep);
+            printfd("Subtree in p2: %s\n", get_dag_expr(subtree_in_p2->dag));
+            
             //fancy_dag_print(subtree_in_p2->dag);
 
-            //fancy_dag_print(subtree_in_p2); //printf("This i sp2\n");
             res_tree->mode = m1;
             res_tree->count = c1;
-            res_tree->dag = copy_subtree_crossover(p1->dag, subtree_in_p2, to_table, res_tree, 0, max_dep);
+            res_tree->dag = copy_subtree_crossover(p1->dag, subtree_in_p2, to_table, res_tree, 0, max(max_dep, p1->depth));
         } else {
             printf(PREERR"Failed crossover operation: failed to get subtree in second parent.\n");
             free(res_tree);
@@ -94,6 +99,7 @@ dag_node *copy_subtree_crossover(dag_node *p1, tree *p2, HashTable *to_table, tr
         dag_node *p2_dag = p2->dag;
 
         int dep_to_take = p2->depth + dep - max_dep;
+        //printf("dep to take, dep, max_d, %d %d %d\n", dep_to_take, dep, max_dep);
         if (dep_to_take > 0) {
             p2_dag = rnd_node_depn(p2_dag, p2->depth, dep_to_take);
         }
@@ -123,7 +129,7 @@ tree *subtree_mutation_d(tree *t, HashTable *to_table, int c, int m, const int m
     res_tree->count = c;
     res_tree->mode = m;
 
-    res_tree->dag = copy_subtree_mutation(t->dag, to_table, res_tree, 0, max_dep);
+    res_tree->dag = copy_subtree_mutation(t->dag, to_table, res_tree, 0, max(max_dep, t->depth));
     return res_tree;
 }
 
@@ -234,7 +240,7 @@ tree *insert_mutation_d(tree *t, HashTable *to_table, uint32_t c, int m, const i
     if (p != -1) {
         res_tree->count = c;
         res_tree->mode = m;
-        res_tree->dag = copy_insert_mutation(t->dag, to_table, res_tree, 0, max_dep);
+        res_tree->dag = copy_insert_mutation(t->dag, to_table, res_tree, 0, max(max_dep, t->depth));
     } else {
         printf(PREERR"Cannot perform insert mutation: there is no function primitive with more than 0 arguments\n");
         res_tree = copy_tree(t, to_table);
@@ -244,7 +250,7 @@ tree *insert_mutation_d(tree *t, HashTable *to_table, uint32_t c, int m, const i
 }
 
 
-dag_node *copy_insert_mutation(dag_node *node, HashTable *to_table, tree *stats, int dep, int max_dep) {
+dag_node *copy_insert_mutation(dag_node *node, HashTable *to_table, tree *stats, int dep, const int max_dep) {
     int primitive = node->primitive;
     int arity = node->arity;
     c_node children = {NULL};
@@ -375,7 +381,7 @@ dag_node *copy_point_mutation(dag_node *node, HashTable *to_table, tree *stats, 
 }
 
 
-tree* mutation(tree* parent, HashTable *t, int max_dep) {
+tree* mutation(tree* parent, HashTable *t, const int max_dep) {
     int mutation_selector = rand() % DEFINED_MUTATIONS;
     switch(mutation_selector) {
         default:
@@ -403,7 +409,7 @@ tree *tournament(Engine *run, tree **population) {
     int n = run->pop_size;
     int size = run->tournament_size;
     if(size < 0) {
-        printf(PREERR"Tournament size below 0: %d, constraining size to 1.\n", size);
+        printf(PREWARN"Tournament size below 0: %d, constraining size to 1.\n", size);
         size = 1;
     }
     
@@ -414,7 +420,8 @@ tree *tournament(Engine *run, tree **population) {
         TS_BEST_IN_POP(indices[i]);
         free(indices);
     } else {
-        printf(PREERR"Tournament size above n (%d): %d, constraining size to n.\n", n, size);
+        printf(PREWARN"Tournament size above n(%d): %d, constraining size to n.\n", n, size);
+        size = clip(0, size, n);
         TS_BEST_IN_POP(i);
     }
 
