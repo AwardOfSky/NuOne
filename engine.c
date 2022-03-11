@@ -6,7 +6,7 @@
 #include "gp.h"
 
 // fitness func
-float pagie_poly(float x, float y) {
+domain_t pagie_poly(domain_t x, domain_t y) {
     return ((1 / (1 + (1 / (x * x * x * x)))) + (1 / (1 + (1 / (y * y * y * y)))));
 }
 
@@ -41,9 +41,9 @@ void set_default_params(Engine *run) {
 void init_stats(Stats *stats) {
     stats->hist_len = INIT_MAX_GENS;
     for (int i = 0; i < STAT_ARRS; ++i) {
-        stats->dep_hist[i] = (float *)malloc(INIT_MAX_GENS * sizeof(*(stats->dep_hist[i])));
-        stats->fit_hist[i] = (float *)malloc(INIT_MAX_GENS * sizeof(*(stats->fit_hist[i])));
-        stats->node_hist[i] = (float *)malloc(INIT_MAX_GENS * sizeof(*(stats->node_hist[i])));
+        stats->dep_hist[i] = (double *)malloc(INIT_MAX_GENS * sizeof(*(stats->dep_hist[i])));
+        stats->fit_hist[i] = (double *)malloc(INIT_MAX_GENS * sizeof(*(stats->fit_hist[i])));
+        stats->node_hist[i] = (double *)malloc(INIT_MAX_GENS * sizeof(*(stats->node_hist[i])));
     }
 }
 
@@ -66,44 +66,51 @@ Engine *create_params(int set_default) {
 }
 
 
+void reset_cur_vars(Engine *run) {
+    for(int i = 0; i < DIMS; ++i) {
+        run->cur_vars[i] = run->MIN_DOMAIN[i];
+    }
+    run->index = 0;
+    //printf("Reseting index, %d\n", run->index);
+}
+
+
 void setup(Engine *run, int cache_size) {
 
     // setup fitness cases, step
     run->fitness_cases = 1;
     for(uint32_t i = 0; i < DIMS; ++i) {
-        run->STEP[i] = DOMAIN_DELTA(run, i) / (float)(run->resolution[i] - 1);
+        run->STEP[i] = DOMAIN_DELTA(run, i) / (domain_t)(run->resolution[i] - 1);
         run->fitness_cases *= run->resolution[i];
     }
-    run->target = (float *)malloc(sizeof(*(run->target)) * run->fitness_cases);
-    //run->domain = (float *)malloc(sizeof(*(run->domain)) * run->fitness_cases);
+    run->target = (domain_t *)malloc(sizeof(*(run->target)) * run->fitness_cases);
+    //run->domain = (domain_t *)malloc(sizeof(*(run->domain)) * run->fitness_cases);
 
     // init cache
-    // run->cache = create_cache(cache_size);
+    cache = create_cache(run->fitness_cases, cache_size);
 
 
     // init vars for target loop
-    float cur_vars[DIMS];
-    for (uint32_t i = 0; i < DIMS; ++i) {
-        cur_vars[i] = run->MIN_DOMAIN[i];
-    }
+    reset_cur_vars(run);
     
     // setup target
     for(uint32_t i = 0; i < run->fitness_cases; ++i) {
-        run->target[i] = pagie_poly(cur_vars[0], cur_vars[1]);
+        run->target[i] = pagie_poly(run->cur_vars[0], run->cur_vars[1]);
         
         // setup vars in cache
-        //for (int j = 0; j < DIMS; ++j) {
-        //   run->cache->vars[j * run->fitness_cases + i] = run->cur_vars_g[j];
-        //}
-        //cache->vars[0] = cur_vars_g[0];
+        if (ENABLE_CACHE) {
+            for (int j = 0; j < DIMS; ++j) {
+                cache->vars[j * run->fitness_cases + i] = run->cur_vars[j];
+            }
+        }
 
-        STEP_DOMAIN(run, cur_vars);
+        STEP_DOMAIN(run);
     }
 }
 
 
 void print_params(Engine *run) {
-    printf("\n========== Evolution parameters: ==========\n");
+    printf("\n========== Engine parameters: ==========\n");
     printf("Generations:\t%u\n", run->generations);
     printf("Tour size:\t%u\n", run->tournament_size);
     printf("Terminal prob:\t%.3f\n", run->term_prob);
@@ -157,7 +164,7 @@ void print_params(Engine *run) {
 
 
 void free_engine(Engine *run) {
-    // free(run->cache);
+    free_cache(cache);
     free_stats(run->stats);
     free(run->stats);
     free(run);
@@ -172,7 +179,7 @@ void cleanup(Engine *run) {
 
 
 uint64_t calculate_stats(Engine *run, tree **population) {
-    FIT_TYPE sum_fit = 0.0;
+    fit_t sum_fit = 0.0;
     Stats *s = run->stats;
     int sum_dep = 0;
     int sum_nodes = 0;
@@ -186,12 +193,12 @@ uint64_t calculate_stats(Engine *run, tree **population) {
         sum_prims += population[i]->n_prims;
         sum_nodes += population[i]->n_prims + population[i]->n_terms;
     }
-    float mean_fit = (float)sum_fit / (float)(n);
-    float mean_dep = (float)sum_dep / (float)(n);
-    float mean_nodes = (float)sum_nodes / (float)(n);
-    float std_fit = 0.0;
-    float std_dep = 0.0;
-    float std_nodes = 0.0;
+    double mean_fit = (double)sum_fit / (double)(n);
+    double mean_dep = (double)sum_dep / (double)(n);
+    double mean_nodes = (double)sum_nodes / (double)(n);
+    double std_fit = 0.0;
+    double std_dep = 0.0;
+    double std_nodes = 0.0;
 
     for(int i = 0; i < n; ++i) {
         std_fit = pow(population[i]->fitness - mean_fit, 2);
@@ -201,15 +208,15 @@ uint64_t calculate_stats(Engine *run, tree **population) {
 
 
     s->fit_hist[Average][gen] = mean_fit;
-    s->fit_hist[StandardDev][gen] = (float)sqrt(std_fit / (float)(n));
+    s->fit_hist[StandardDev][gen] = (double)sqrt(std_fit / (double)(n));
     s->fit_hist[Best][gen] = population[run->best_ind_gen]->fitness;
 
     s->dep_hist[Average][gen] = mean_dep;
-    s->dep_hist[StandardDev][gen] = (float)sqrt(std_dep / (float)(n));
+    s->dep_hist[StandardDev][gen] = (double)sqrt(std_dep / (double)(n));
     s->dep_hist[Best][gen] = population[run->best_ind_gen]->depth;
 
     s->node_hist[Average][gen] = mean_nodes;
-    s->node_hist[StandardDev][gen] = (float)sqrt(std_nodes / (float)(n));
+    s->node_hist[StandardDev][gen] = (double)sqrt(std_nodes / (double)(n));
     s->node_hist[Best][gen] = population[run->best_ind_gen]->n_terms + population[run->best_ind_gen]->n_prims;
     return run->fitness_cases * sum_prims;
 }
@@ -217,7 +224,7 @@ uint64_t calculate_stats(Engine *run, tree **population) {
 
 void print_gen_statistics(Engine *run, tree **population, double duration) {
     duration = max(FLT_MIN, duration);
-    uint64_t gpops = (uint64_t)((double)calculate_stats(run, population) / duration);
+    uint64_t gpops = (uint64_t)(calculate_stats(run, population) / duration);
     Stats *s = run->stats;
     uint32_t g = run->cur_gen;
     if (!g) {
@@ -256,12 +263,12 @@ int evolve(Engine *run) {
 
     if (ENABLE_CACHE) {
         if (debug) {
-            printf("Building cache!\n");
+            printf("Building cache...");
             //print_candidate_list(curt, 1);
         }
         //build_cache(curt, 0);
         if (debug) {
-            printf("Built cache!\n");
+            printf("Done!\n");
             //print_candidate_list(curt, 1);
             //print_cache(0);
         }
@@ -347,7 +354,7 @@ int evolve(Engine *run) {
         // calculate fitness of new population
         if (ENABLE_CACHE) {
             //build_cache(newt, gen);
-            if (debug) printf("Building cache!\n");
+            if (PDEBUG) printf("Building cache!\n");
         }
         gen_start = clock();
         run->best_ind_gen = calc_pop_fit(run, new_pop);

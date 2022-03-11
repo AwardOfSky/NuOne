@@ -41,6 +41,7 @@ void test_sel_min(int n, int size);
 void test_point_mutation(uint32_t table_size, int stress);
 void test_evolution_v1();
 void test_realloc();
+void test_cache(size_t table_size);
 
 
 int main() {
@@ -81,12 +82,85 @@ int main() {
 
     // test_sel_min(10000, 10);
     
-    test_evolution_v1();
+    //test_evolution_v1();
     //test_realloc();
+    
+    test_cache(16);
 
     printf("Exiting!\n");
 
     return 0;
+}
+
+
+void test_cache(size_t table_size) {
+    uint32_t cache_s = 16;
+    // tested shrink with cache size 16 (factor grow, shrink 2, 4) and grow with 3 (factor grow, shrink 2, 4)
+
+    Engine *run = create_params(1);
+    for (int i = 0; i < DIMS; ++i) {
+        run->resolution[i] = 4;
+        run->MIN_DOMAIN[i] = -5;
+        run->MAX_DOMAIN[i] = 5;
+    }
+    setup(run, cache_s);
+    //print_domain(run->target, run->fitness_cases, run->resolution);
+    //print_params(run);
+
+    HashTable *t1 = create_hashtable(table_size);
+    HashTable *t2 = create_hashtable(table_size);
+    //const char *genotype = "mul(sin(x), sin(x))";
+    //const char *genotype = "add(if(sin(x), sin(x), tan(y)), mul(add(y, y), add(y, y)))";
+    //const char *genotype1 = "sub(mul(sin(x), add(y, y)), tan(y))";
+
+    const char *genotype = "add(if(sin(x), sin(x), tan(y)), if(sin(x), tan(y), add(y, y)))";
+    const char *genotype1 = "sub(mul(sin(x), add(y, y)), mul(add(y, y), add(y, y)))";
+
+    tree *parent = str_to_tree(t1, genotype);
+    tree *parent1 = str_to_tree(t1, genotype1);
+
+    print_dag_table(t1->table, t1->size);
+    print_candidate_list(t1, 1);
+
+
+    printf("Starting gen 1!\n");
+    printf("Building cache...\n");
+    build_cache(t1, 0, run->fitness_cases);
+    printf("Done!\n\n");
+    printf("Updated node list: ");
+    print_candidate_list(t1, 1);
+    fit_t fitness;
+    fitness = calc_tree_fit(run, parent);
+    printf("Secind tree\n");
+    fitness = calc_tree_fit(run, parent1);
+    print_cache(run->resolution, 1);
+
+    printf("Starting gen 2!\n");
+    const char *gen2genotype = "add(if(sin(x), tan(y), add(y, y)), if(sin(x), tan(y), add(y, y)))";
+    //tree *parent2 = str_to_tree(t2, gen2genotype);
+
+    tree *parent2 = subtree_crossover_d(parent, parent, t2, 2, 9, All_Prims, All_Prims, 10);
+    printf("\n");
+    print_tree(parent2, 1, 0);
+
+    printf("Building cache gen 2...\n");
+    build_cache(t2, 1, run->fitness_cases);
+    printf("Done!\n\n");
+    printf("Updated node list: ");
+    print_candidate_list(t2, 1);
+    fitness = calc_tree_fit(run, parent2);
+    printf("Done!\n");
+    print_cache(run->resolution, 1);
+
+
+    printf("The fitness was (do not optimize): %.3f\n", fitness);
+    printf("\nFreeing cache:...");
+    printf("Done!\nFreeing other stuff...");
+    free(t1);
+    free(t2);
+    free(parent);
+    cleanup(run);
+    printf("Done!\nCleanup done, let's exit!\n");
 }
 
 
@@ -353,7 +427,7 @@ void test_insert_mutation(uint32_t table_size, int stress) {
 //enum PSet_IDs {Scalar = 1, X = 2, Y = 3, Add = 4, Sub = 5, Div = 6, Mul = 7, PSET_START = 1, TSET_END = 3, PSET_END = 7};
 void test_list_same_arity() {
     int n;
-    PRIM_INDEX_TYPE *cands = get_list_same_arity(0, &n, 0, 10, 0);
+    prim_index_type *cands = get_list_same_arity(0, &n, 0, 10, 0);
     printf("N is : %d\n", n);
     PRINT_ARR(cands, n, "%d");
     printf("\n");

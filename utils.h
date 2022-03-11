@@ -99,6 +99,7 @@ DECLARE_COMPUTE_STD(float);
 //DECLARE_COMPUTE_MEAN(int);
 //DECLARE_COMPUTE_MEAN(float);
 DECLARE_REALLOC(float);
+DECLARE_REALLOC(char);
 
 float rand_float();
 int vasprintf(char **strp, const char *format, va_list ap);

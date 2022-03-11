@@ -5,7 +5,6 @@
 #include <math.h>
 
 #define MAX_TREE_NODES (1 << 30)
-#define ENABLE_CACHE 0
 #define CHILDREN_ARR_RATIO 2.0
 #define SCALAR_INIT_SIZE 1024
 #define CHILD_INIT_SIZE 1024
@@ -13,20 +12,6 @@
 #define MAX_CHILD_SIZE 1073741824
 #define N_CHILDREN_ARR 64
 #define INIT_HASHMAP_SIZE 65535
-
-//temp cache stuff
-#define OA_NODES 4
-#define RADIX_SORT_THRESH 64
-#define UPDATE_CACHE_N_GEN 5
-#define FACTOR_TO_GROW_CACHE 4
-#define ENABLE_CACHE 0
-#define MAX_CACHE_SIZE 16384
-#define MIN_CACHE_SIZE 1
-#define MAX_CACHE_CANDIDATES 65536
-#define MIN_CACHE_REQ 0
-#define IMPORTANCE(FREQ, NODES) (FREQ * NODES)
-#define INIT_CACHE_SIZE 1024
-#define INIT_CAND_SIZE 8192
 
 
 #define ALLOC_PTRS(T, PTRS, IND, ARR, SIZE, TYPE, MSG) do {                             \
@@ -69,8 +54,7 @@ typedef struct HashTable {
     uint32_t size;
     dag_node ***child_ptrs;
     float **scalar_ptrs;
-    //cache_node *candidates;
-    uint32_t *candidates;
+    struct cache_node *candidates;
     uint32_t cand_index;
     uint32_t cand_size;
     uint32_t n_nodes;
@@ -82,6 +66,7 @@ typedef struct HashTable {
     int cur_child_arr_size;
 } HashTable;
 
+#include "cache.h"
 
 HashTable *create_hashtable(uint32_t n);
 void print_table_stats(b_node *table, int n, int do_extra_stats);
@@ -94,6 +79,7 @@ uint32_t hash_dag_node(uint32_t primitive, int arity, c_node children);
 dag_node **alloc_child_ptrs(HashTable *t, int slots);
 float *alloc_scalar_ptrs(HashTable *t, int slots);
 uint32_t hash_dag_node(uint32_t primitive, int arity, c_node children);
+void print_candidate_list(HashTable *t, int print_cache_cands);
 dag_node *add_dag_node(HashTable *t, uint32_t primitive, c_node children);
 dag_node *add_dag_node_index(HashTable *t, uint32_t primitive, c_node children, int ind);
 

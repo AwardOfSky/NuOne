@@ -8,14 +8,17 @@
 
 // 32 bytes
 typedef struct Stats {
-    float *fit_hist[STAT_ARRS];
-    float *dep_hist[STAT_ARRS];
-    float *node_hist[STAT_ARRS];
+    double *fit_hist[STAT_ARRS];
+    double *dep_hist[STAT_ARRS];
+    double *node_hist[STAT_ARRS];
     size_t hist_len;
 } Stats;
 
 //TODO: add vars like gen and timers to the engine struct
 typedef struct Engine {
+    fit_t cur_vars[DIMS];
+    uint32_t index;
+
     uint32_t generations;
     uint32_t tournament_size;
     float term_prob;
@@ -37,10 +40,10 @@ typedef struct Engine {
     uint32_t initial_hashmap_size;
     int req_to_cache;
     uint32_t resolution[DIMS];
-    float MIN_DOMAIN[DIMS];
-    float MAX_DOMAIN[DIMS];
-    float STEP[DIMS];
-    float *target;
+    domain_t MIN_DOMAIN[DIMS];
+    domain_t MAX_DOMAIN[DIMS];
+    domain_t STEP[DIMS];
+    domain_t *target;
     uint32_t fitness_cases;
     Stats *stats;
     uint32_t best_ind_gen;
@@ -49,11 +52,12 @@ typedef struct Engine {
 
 
 
-float pagie_poly(float x, float y);
+domain_t pagie_poly(domain_t x, domain_t y);
 void set_default_params(Engine *params);
 void init_stats(Stats *stats);
 void free_stats(Stats *stats);
 Engine *create_params(int set_default);
+void reset_cur_vars(Engine *run);
 void setup(Engine *run, int cache_size);
 void print_params(Engine *run);
 void free_engine(Engine *run);

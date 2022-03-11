@@ -157,3 +157,4 @@ MAKE_COMPUTE_STD(float); // compute_std_float
 //MAKE_COMPUTE_MEAN(int); // compute_mean_int
 //MAKE_COMPUTE_MEAN(float); // compute_mean_float
 MAKE_REALLOC(float);
+MAKE_REALLOC(char);

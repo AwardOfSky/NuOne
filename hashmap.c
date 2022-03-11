@@ -6,15 +6,13 @@
 HashTable *create_hashtable(uint32_t n) {
     HashTable *htable = (HashTable *)calloc(1, sizeof(HashTable));
     htable->size = n;
-    //htable->table = (b_node *)calloc(n, sizeof(b_node));
     htable->table = (b_node *)calloc(n + (OA_NODES - 1), sizeof(b_node));
     for (int i = VAR_START; i <= VAR_END; ++i) {
         htable->table[i - VAR_START].node.primitive = i;
         htable->table[i - VAR_START].node.candid = -1;
     }
     
-    //htable->candidates = (cache_node *)calloc(INIT_CAND_SIZE, sizeof(cache_node));
-    htable->candidates = NULL;
+    htable->candidates = (cache_node *)calloc(INIT_CAND_SIZE, sizeof(cache_node));
     
     htable->cand_size = INIT_CAND_SIZE;
     htable->n_nodes = (VAR_END - VAR_START) + 1;
@@ -120,9 +118,10 @@ void free_hashtable(HashTable *t) {
 
 
 void print_dag_table(b_node *table, int n) {
+    printf("\nHashtable: \n");
     for(int i = 0; i < n + (OA_NODES - 1); ++i) {
         b_node *cur = &table[i];
-        printf("Bucket :%d %d\n", i, cur->node.primitive);
+        printf("Bucket %d:\n", i);
         while(cur != NULL && cur->node.primitive != 0) {
             print_dag_node(&cur->node);
             cur = cur->next;
@@ -170,6 +169,19 @@ dag_node **alloc_child_ptrs(HashTable *t, int slots) {
 
 float *alloc_scalar_ptrs(HashTable *t, int slots) {
     ALLOC_PTRS(t, scalar_ptrs, scalar_ind, scalar_arr, cur_scalar_arr_size, float, "Scalar");
+}
+
+
+void print_candidate_list(HashTable *t, int print_cache_cands) {
+    printf("\nCandidate list:\n");
+    int to_print = print_cache_cands ? t->cand_index : t->cand_size;
+    printf("Size of Candidate List: %d\n", t->cand_size);
+    printf("Candidate List index: %d\n", t->cand_index);
+    printf("\nIndex:\t(DAG ptr,\tCache Index,\tImportance)\n\n");
+    for(int i = 0; i < to_print; ++i) {
+        printf("%d:\t(%p,\t%d,\t%d)\n", i, t->candidates[i].dag, t->candidates[i].index, t->candidates[i].importance);
+    }
+    printf("\n");
 }
 
 
@@ -241,7 +253,7 @@ dag_node *add_dag_node_index(HashTable *t, uint32_t primitive, c_node children, 
             }
             
             if (ENABLE_CACHE) {
-                //handle_candidates(dag, t, ind);
+                handle_candidates(dag, t, ind);
             }
         }
 

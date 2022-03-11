@@ -27,8 +27,9 @@
 #define IS_FUNC(PRIM, ARITY) (ARITY && PRIM != Scalar)
 
 // TODO: apply to other functions
-#define PRIM_INDEX_TYPE uint32_t
-#define FIT_TYPE float
+typedef uint32_t prim_index_type;
+typedef double fit_t;
+typedef float domain_t;
 
 
 #define DAG_EQ(DAG, ARITY, PRIM, CHILDREN)                                                              \
@@ -59,18 +60,19 @@
 #define GENERATE_TERMINAL(TABLE, DUMMY) generate_program(TABLE, Full, 0, 0, 0.5, &DUMMY);
 
 
-#define STEP_DOMAIN(RUN, CUR_VARS) do {                                                                 \
-    int index = 0;                                                                                      \
-    CUR_VARS[0] += RUN->STEP[0];                                                                        \
-    while((CUR_VARS[index] > RUN->MAX_DOMAIN[index] + RUN->STEP[index] / 2.0) && (index + 1 < DIMS)) {  \
-        CUR_VARS[index] = RUN->MIN_DOMAIN[index];                                                       \
-        ++index;                                                                                        \
-        CUR_VARS[index] += RUN->STEP[index];                                                            \
-    }                                                                                                   \
+#define STEP_DOMAIN(RUN) do {                                                                               \
+    int index = 0;                                                                                          \
+    RUN->cur_vars[0] += RUN->STEP[0];                                                                       \
+    while((RUN->cur_vars[index] > RUN->MAX_DOMAIN[index] + RUN->STEP[index] / 2.0) && (index + 1 < DIMS)) { \
+        RUN->cur_vars[index] = RUN->MIN_DOMAIN[index];                                                      \
+        ++index;                                                                                            \
+        RUN->cur_vars[index] += RUN->STEP[index];                                                           \
+    }                                                                                                       \
+    RUN->index++;                                                                                           \
 } while(0)
 
 
-#define PDEBUG 0
+#define PDEBUG 1
 #if PDEBUG
     #define printfd(...) printf(__VA_ARGS__);
 #else
@@ -153,8 +155,8 @@ dag_node *generate_program_w(HashTable *table, int method, int depth, int limit_
 tree *str_to_tree(HashTable *table, const char* str);
 dag_node *str_to_dag(HashTable *table, const char **strp, int depth, tree *stats);
 Prim *get_prim_index(const char *prim_str);
-PRIM_INDEX_TYPE *get_list_same_arity(int arity, int *n, int exclude, int ignore_specific, int search_set);
-int get_prim_same_arity(int arity, int exclude, int ignore_specific, int search_set);
+prim_index_type *get_list_same_arity(int arity, int *n, int exclude, int ignore_specific, int search_set);
+prim_index_type get_prim_same_arity(int arity, int exclude, int ignore_specific, int search_set);
 char *get_dag_expr(dag_node *t);
 void print_tree(tree *t, int print_stats, int do_fancy);
 void print_population(tree **population, int n, int generation, int do_fancy);
@@ -169,14 +171,15 @@ tree **sort_k_min_trees(tree **array, int n, int size);
 tree **get_k_min_trees(tree **arr, int n, int size);
 tree **sel_k_min_trees(tree **arr, int n, int size);
 
-void print_domain(FIT_TYPE *data, uint32_t n, const uint32_t *format);
-FIT_TYPE icompute_node_g(dag_node *t, const FIT_TYPE* cur_vars);
-FIT_TYPE icompute_node_g_d(dag_node *t, const FIT_TYPE* cur_vars);
+void print_domain(fit_t *data, uint32_t n, const uint32_t *format);
+DECLARE_REALLOC(fit_t);
+fit_t icompute_node_g(dag_node *t, const Engine *run);
+fit_t icompute_node_g_d(dag_node *t, const Engine *run);
 int calc_pop_fit(Engine *run, tree **population);
-FIT_TYPE no_tree_fit(tree *t);
-FIT_TYPE calc_tree_fit(Engine *run, tree *t);
-FIT_TYPE *icompute_domain_g(Engine *run, dag_node *t);
-FIT_TYPE icalculate_fitness_g(Engine *run, FIT_TYPE *values);
+fit_t no_tree_fit(tree *t);
+fit_t calc_tree_fit(Engine *run, tree *t);
+fit_t *icompute_domain_g(Engine *run, dag_node *t);
+fit_t icalculate_fitness_g(Engine *run, fit_t *values);
 
 
 #endif
