@@ -40,7 +40,7 @@ tree *point_mutation(tree *t, HashTable *to_table);
 tree *point_mutation_d(tree *t, HashTable *to_table, uint32_t c, int m);
 dag_node *copy_point_mutation(dag_node *node, HashTable *to_table, tree *stats, int dep);
 tree* mutation(tree* parent, HashTable *t, const int max_dep);
-tree *tournament(Engine *run, tree **population);
+tree *tournament(tree **population);
 
 
 #endif

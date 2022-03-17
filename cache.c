@@ -2,17 +2,15 @@
 #include <stdlib.h>
 #include "gp.h"
 
-void handle_candidates1(dag_node *dag, HashTable *t, int ind) { 
-    //printf("Entering cand handling\n");
+
+void handle_candidates(dag_node *dag, HashTable *t, int ind) { 
     int node_imp = IMPORTANCE(dag->frequency, dag->n_offspring);
 
     if (node_imp >= MIN_CACHE_REQ) { // meets min cache req
         cache_node *get_dag_in_cand = NULL;
-        //printf("dag candid: %d, ind: %d, cand_index: %u\n", dag->candid, ind, t->cand_index);
         if (dag->candid == -1) { // not in the cadidate list, let's add
 
             if (t->cand_index >= t->cand_size) {
-                //realloc_candidate_list(t, t->cand_size * FACTOR_TO_GROW_CANDLIST);
                 realloc_cache_node(t->candidates, t->cand_size * FACTOR_TO_GROW_CANDLIST, (size_t *)(&(t->cand_size)));
             }
 
@@ -23,7 +21,7 @@ void handle_candidates1(dag_node *dag, HashTable *t, int ind) {
             // -1 means that this node is new (not in the old hashtable)
             // if node is not new and its cache index is valid
             // (was actually calculated in last gen, then add it, no need to recalculate)
-            if (ind > -1 && cache->valid[ind]) {
+            if (ind > -1 && cache.valid[ind]) {
                 get_dag_in_cand->index = ind;
             } else {
                 get_dag_in_cand->index = -1;
@@ -40,92 +38,63 @@ void handle_candidates1(dag_node *dag, HashTable *t, int ind) {
         // ( VICandidates will be added lots of times...)
         get_dag_in_cand->importance = node_imp;
     }
-    //printf("Leaving cand handling\n");
 }
 
 
-
-void handle_candidates(dag_node *dag, HashTable *t, int ind) { 
-    int node_imp = IMPORTANCE(dag->frequency, dag->n_offspring);
-
-    // meets minimum requirement to be a candidate for cache
-    if (node_imp >= MIN_CACHE_REQ) {
-        cache_node *get_dag_in_cand = NULL;
-
-        // not in the cadidate list, let's add
-        if (dag->candid == -1) {
-            if (t->cand_index >= t->cand_size) {
-                t->candidates = realloc_cache_node(t->candidates, t->cand_size * FACTOR_TO_GROW_CANDLIST, (size_t *)(&(t->cand_size)));
-            }
-
-            dag->candid = t->cand_index++;
-            get_dag_in_cand = &(t->candidates[dag->candid]);
-            get_dag_in_cand->dag = dag; // get ref to this node
-
-            if (ind > -1 && cache->valid[ind]) {
-                get_dag_in_cand->index = ind;
-            } else {
-                get_dag_in_cand->index = -1;
-            }
-        
-        } else { // already in the candidate list
-            get_dag_in_cand = &(t->candidates[dag->candid]);
-        }
-
-        get_dag_in_cand->importance = node_imp;
+void init_cache(size_t n) {
+    cache.vars = (fit_t *)malloc(DIMS * run.fitness_cases * sizeof(*cache.vars));
+    if (ENABLE_CACHE) {
+        cache.size = n;
+        cache.data = (fit_t *)malloc(n * run.fitness_cases * sizeof(*(cache.data)));
+        cache.valid = (char *)calloc(n, sizeof(*cache.valid));
+        cache.occupied = 0;
     }
 }
 
 
-Cache *create_cache(size_t fit_cases, size_t n) {
-    if (!ENABLE_CACHE) {
-        return NULL;
-    }
-
-    Cache *res = (Cache *)malloc(sizeof(*res));
-    res->size = n;
-    res->data = (fit_t *)malloc(n * fit_cases * sizeof(*res->data));
-    res->vars = (fit_t *)malloc(DIMS * fit_cases * sizeof(*res->vars));
-    res->valid = (char *)calloc(n, sizeof(*res->valid));
-    res->occupied = 0;
-    return res;
-}
-
-
-// TODO: if cache is global then maybe we shoould remove the argument to function
-void free_cache(Cache *c) {
+void free_cache() {
+    free(cache.vars);
     if (ENABLE_CACHE) { 
-        free(c->data);
-        free(c->valid);
-        free(c->vars);
-        free(c);
+        free(cache.data);
+        free(cache.valid);
     }
 }
 
 
-void realloc_cache(uint32_t new_size, size_t fit_cases) {
-    cache->valid = realloc_char(cache->valid, new_size, (size_t *)(&(cache->size)));
-    cache->data = realloc_fit_t(cache->data, new_size * fit_cases, NULL);
+fit_t *realloc_fit_t1(fit_t *data, const size_t new_size, size_t *sptr) {
+    fit_t *tp = (fit_t*)realloc(data, sizeof(fit_t) * new_size);
+    if (tp != NULL || new_size == 0) {
+        data = tp;
+        if (sptr != NULL) {
+            *sptr = new_size;
+        }
+    } else {
+        printf(PREERR"OOM: Failed to realloc array of type fit_t, on memory address %p. ", data);
+        printf("Requested %I64d bytes.\n", sizeof(*data) * new_size);
+    }
+    return data;
+}            
+
+
+void realloc_cache(uint32_t new_size) {
+    cache.valid = realloc_char(cache.valid, new_size, (size_t *)(&(cache.size)));
+    cache.data = realloc_fit_t1(cache.data, new_size * run.fitness_cases, NULL);
 }
 
 
 void print_cache(uint32_t *format, int print_invalid) {
-    uint64_t fitness_cases = 1;
-    for (int i = 0; i < DIMS; ++i) {
-        fitness_cases *= format[i];
-    }
     printf("\nCache state:\n");
-    printf("Cache size: %d\n", cache->size);
-    printf("Occupied: %d (%.3f%%)\n", cache->occupied, (((double)cache->occupied / (double)cache->size)) * 100.0);
-    printf("Cached accessed %d times.\n", cache->accesses);
-    printf("Cache nodes validated: %d\n", cache->validated);
+    printf("Cache size: %d\n", cache.size);
+    printf("Occupied: %d (%.3f%%)\n", cache.occupied, (((double)cache.occupied / (double)cache.size)) * 100.0);
+    printf("Cached accessed %d times.\n", cache.accesses);
+    printf("Cache nodes validated: %d\n", cache.validated);
     
     printf("Cache Table\t: (validity,\tdata)\n");
-    for (int i = 0; i < cache->size; ++i) {
-        printf("\nIndex %d\t\t: %d\n", i, cache->valid[i]);
-        if (cache->valid[i] || print_invalid) {
+    for (int i = 0; i < cache.size; ++i) {
+        printf("\nIndex %d\t\t: %d\n", i, cache.valid[i]);
+        if (cache.valid[i] || print_invalid) {
             printf("Data:");
-            print_domain(&cache->data[i * fitness_cases], fitness_cases, format);
+            print_domain(&cache.data[i * run.fitness_cases], run.fitness_cases, format);
         }
     }
 
@@ -140,44 +109,43 @@ int cmp_candidates(const void *a, const void *b) {
     return res;
 }
 
+#define DEB_UPDATE run.cur_gen == 102
 
-void build_cache(HashTable *t, int gen, int fitness_cases) {
+void build_cache(HashTable *t, int gen) {
 
-    cache->validated = 0;
-    cache->accesses = 0;
+    cache.validated = 0;
+    cache.accesses = 0;
 
     // 0 - check if we need to grow the cache
     int shrink = 1;
-    printf("before Cache index, size: %d, %d\n", t->cand_index, cache->size);
-    if ((t->cand_index * FACTOR_TO_GROW_CACHE > cache->size) && !((gen + 1) % UPDATE_CACHE_N_GEN)) {
-        uint32_t tentative_size = cache->size << 1; // it can be this for now
-        //printfd("@@@@@@@@@@@Growing cache! %d\n", tentative_size);
+    if ((t->cand_index * FACTOR_TO_GROW_CACHE > cache.size) && !((gen + 1) % UPDATE_CACHE_N_GEN)) {
+        uint32_t tentative_size = cache.size << 1; // it can be this for now
+        printfd("Tentative size: %d\n", tentative_size);
 
-        if (tentative_size <= MAX_CACHE_SIZE) {
+        if (tentative_size <= MAX_CACHE_SIZE && tentative_size * run.fitness_cases <= MAX_CACHE_MEMORY) {
             shrink = 0;
-            realloc_cache(tentative_size, fitness_cases);
+            realloc_cache(tentative_size);
         } else {
             printf(PREWARN"Cache is at 100%% capacity, cannot grow.\n");
         }
+        if (DEB_UPDATE) printf("Grow: Cache size, cand index: %d %d\n", cache.size, t->cand_index);
     }
-    printf("after Cache index, size: %d, %d\n", t->cand_index, cache->size);
 
-    //if (t->cand_index > RADIX_SORT_THRESH) {
-    //    radix_strut(t->candidates, t->cand_index);
-    //} else {
-        //radix_strut(t->candidates, t->cand_index);
-    //}
     // 1 - sort candidates
-    qsort(t->candidates, t->cand_index, sizeof(*t->candidates), cmp_candidates);
+    if (t->cand_index < RADIX_SORT_THRESH) {
+        qsort(t->candidates, t->cand_index, sizeof(*t->candidates), cmp_candidates);
+    } else {
+        RADIX_SORT_STRUCT(t->candidates, t->cand_index, 0, cache_node, int, .importance);
+    }
 
     // 2 - invalidate cache
-    memset(cache->valid, 0, cache->size);
+    memset(cache.valid, 0, cache.size);
     
     int *voc;
     int voci;
 
     //check if we should (and can) shrink the cache
-    if (shrink && (t->cand_index * FACTOR_TO_SHRINK_CACHE < cache->size) && ((cache->size >> 1) > MIN_CACHE_SIZE) && !((gen + 1) % UPDATE_CACHE_N_GEN)) {
+    if (shrink && (t->cand_index * FACTOR_TO_SHRINK_CACHE < cache.size) && ((cache.size >> 1) > MIN_CACHE_SIZE) && !((gen + 1) % UPDATE_CACHE_N_GEN)) {
         printfd("Shrinking cache!\n");
         voc = (int *)malloc(sizeof(int) * t->cand_index); // arr of indices of voc (valid old candidates)
         voci = 0;
@@ -187,14 +155,17 @@ void build_cache(HashTable *t, int gen, int fitness_cases) {
 
     // 3 - set old candidates up until n_candidates to valid  
     int i;
-    int n_candidates = min(t->cand_index, cache->size);
-    //printfd("N candidates: %d\n", n_candidates);
-    cache->occupied = n_candidates;
+    int n_candidates = min(t->cand_index, cache.size);
+    if (DEB_UPDATE) printf("\nCache size: %d, n candidates: %d\n", cache.size, n_candidates);
+    cache.occupied = n_candidates;
     for (i = 0; i < n_candidates; ++i) {
         int index = t->candidates[i].index;
         if (index != -1) { // not -1 means its old dag
-            //printf("We should be passing here for (i, index): (%d, %d)\n", i, index);
-            cache->valid[index] = 1;
+            if (index < 0) {
+                printf("Very grave error, index: %d!\n", index);
+            }
+            if (DEB_UPDATE) printf("Found old dag, inserting at cache index: %d\n", index);
+            cache.valid[index] = 1;
             t->candidates[i].dag->candid = index;
             t->candidates[i].index = index;
             if (shrink) {
@@ -202,17 +173,15 @@ void build_cache(HashTable *t, int gen, int fitness_cases) {
             }
         }
     }
-    //printf("Ok here1!\n");
-    //printf("Cand index: %d\n", t->cand_size);
 
     // 4 - assing empty spaces in cache for new dags
     int index_to_assign = 0;
     for(i = 0; i < n_candidates; ++i) {
         if (t->candidates[i].index == -1) { // new dag node
-            //printfd("We should be here! %d %d\n", i, index_to_assign);
-            while (cache->valid[index_to_assign]) {
+            while (cache.valid[index_to_assign]) {
                 ++index_to_assign;
             }
+            if (DEB_UPDATE) printf("Adding new dag, inserting at cache index: %d\n", index_to_assign);
             t->candidates[i].dag->candid = index_to_assign;
             t->candidates[i].index = index_to_assign++;
         }
@@ -221,27 +190,31 @@ void build_cache(HashTable *t, int gen, int fitness_cases) {
     // 5 - memcpy remaining vocs that are in higher indeces in order to shrink the cache
     if (shrink) {
         int cur_ind = index_to_assign;
+        if (DEB_UPDATE) printf("Index to aasign %d, n candidates: %d\n", index_to_assign, n_candidates);
         for (i = 0; i < voci; ++i) {
             int voc_cache_index = t->candidates[voc[i]].index;
-            if (voc_cache_index > index_to_assign) { // NOTE: this is not index to assing, right? It should be the size to shrink (next_power_2(t->cand_index))
-                cache->valid[voc_cache_index] = 0;
-                cache->valid[cur_ind] = 1;
+            if (DEB_UPDATE) printf("voc_cache index: %d, voc[%d]: %d\n", voc_cache_index, i, voc[i]);
+            if (voc_cache_index >= (cache.size >> 1)) { // NOTE: this is not index to assing, right? It should be the size to shrink (next_power_2(t->cand_index))
+        
+                if (cur_ind >= n_candidates) {
+                    printf(PREERR"Cached too many candidates: ");
+                    printf("while inserting candidate at candidate list index %d, cache index %d, cur_index: %d\n", voc[i], voc_cache_index, cur_ind);
+                }
+                cache.valid[voc_cache_index] = 0;
+                cache.valid[cur_ind] = 1;
+                if (DEB_UPDATE) printf("Invalidating cache index %d and validating index %d\n", voc_cache_index, cur_ind);
                 t->candidates[voc[i]].dag->candid = cur_ind;
                 t->candidates[voc[i]].index = cur_ind;
-                memcpy(&cache->data[fitness_cases * cur_ind], &cache->data[fitness_cases * voc_cache_index], fitness_cases * sizeof(*cache->data));
+                memcpy(&cache.data[run.fitness_cases * cur_ind], &cache.data[run.fitness_cases * voc_cache_index], run.fitness_cases * sizeof(*cache.data));
                 ++cur_ind;
             }
         }
         free(voc);
-
-        if (cur_ind != n_candidates) {
-            printf(PREERR"Incompatible indices while shrinking cache - current index: %d,\tn_candidates: %d\n", cur_ind, n_candidates);
-        }
         
         // 5.5 - actually shrink the cache
-        realloc_cache(cache->size >> 1, fitness_cases);
+        realloc_cache(cache.size >> 1);
+        if (DEB_UPDATE) printf("Shrink: Cache size, cand index: %d %d\n", cache.size, t->cand_index);
     }
-    printf("after Cache index, size: %d, %d\n", t->cand_index, cache->size);
 }
 
 

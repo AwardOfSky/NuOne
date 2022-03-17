@@ -1,18 +1,22 @@
 #ifndef CACHE_H
 #define CACHE_H
 
+
+#define ENABLE_CACHE 1
+#define TENSOR_CACHE 1
+
 // NOTE: none of the factors should be lower than 1
 // a higher shrink factor means that is harder (or less likely) to shrink the cache,
 // which in turn promotes bigger cache sizes
 // a higher growth factor means that is easier (or more likely) to grow the cache,
 // which also promotes bigger cache sizes
-#define ENABLE_CACHE 1
 #define OA_NODES 4
-#define RADIX_SORT_THRESH 64
+#define RADIX_SORT_THRESH 128
 #define UPDATE_CACHE_N_GEN 1
 #define FACTOR_TO_GROW_CACHE 2
 #define FACTOR_TO_SHRINK_CACHE 4
 #define FACTOR_TO_GROW_CANDLIST 2
+#define MAX_CACHE_MEMORY (1024 * 1024 * 1024)
 #define MAX_CACHE_SIZE 16384
 #define MIN_CACHE_SIZE 2
 #define MAX_CACHE_CANDIDATES 65536
@@ -39,17 +43,15 @@ typedef struct Cache {
     uint32_t validated;
 } Cache;
 
-// NOTE: keep this global?
-Cache *cache;
-
+Cache cache;
+fit_t *realloc_fit_t1(fit_t *data, const size_t new_size, size_t *sptr);
 void handle_candidates(dag_node *dag, HashTable *t, int ind);
-void handle_candidates1(dag_node *dag, HashTable *t, int ind);
-Cache *create_cache(size_t fit_cases, size_t n);
-void free_cache(Cache *c);
+void init_cache(size_t n);
+void free_cache();
 DECLARE_REALLOC(cache_node);
-void realloc_cache(uint32_t new_size, size_t fit_cases);
+void realloc_cache(uint32_t new_size);
 void print_cache(uint32_t *format, int print_invalid);
 int cmp_candidates(const void *a, const void *b);
-void build_cache(HashTable *t, int gen, int fitness_cases);
+void build_cache(HashTable *t, int gen);
 
 #endif

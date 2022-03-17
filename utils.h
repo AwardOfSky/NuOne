@@ -4,6 +4,7 @@
 #include <stdarg.h>
 #include <stdint.h>
 #include <math.h>
+#include "rsort.h"
 
 #define PREERR "[Error]:\t"
 #define PREWARN "[Warning]:\t"

@@ -50,21 +50,21 @@ typedef struct Engine {
     uint32_t cur_gen;
 } Engine;
 
-
+Engine run;
 
 domain_t pagie_poly(domain_t x, domain_t y);
-void set_default_params(Engine *params);
+void set_default_params();
 void init_stats(Stats *stats);
 void free_stats(Stats *stats);
-Engine *create_params(int set_default);
-void reset_cur_vars(Engine *run);
-void setup(Engine *run, int cache_size);
-void print_params(Engine *run);
-void free_engine(Engine *run);
-void cleanup(Engine *run);
-uint64_t calculate_stats(Engine *run, tree **population);
-void print_gen_statistics(Engine *run, tree **population, double duration);
-int evolve(Engine *run);
+void init_engine(int set_default);
+void reset_cur_vars();
+void setup(int cache_size);
+void print_params();
+void free_engine();
+void cleanup();
+uint64_t calculate_stats(tree **population);
+void print_gen_statistics(tree **population, double duration);
+int evolve();
 
 
 #endif

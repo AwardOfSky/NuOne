@@ -393,7 +393,7 @@ tree* mutation(tree* parent, HashTable *t, const int max_dep) {
 }
 
 
-tree *tournament(Engine *run, tree **population) {
+tree *tournament(tree **population) {
     #define TS_BEST_IN_POP(IND) do {                        \
         float best_fit = FLT_MAX;                           \
         for(int i = 0; i < size; ++i) {                     \
@@ -406,8 +406,8 @@ tree *tournament(Engine *run, tree **population) {
     } while(0)
 
 
-    int n = run->pop_size;
-    int size = run->tournament_size;
+    int n = run.pop_size;
+    int size = run.tournament_size;
     if(size < 0) {
         printf(PREWARN"Tournament size below 0: %d, constraining size to 1.\n", size);
         size = 1;

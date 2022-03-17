@@ -236,7 +236,7 @@ Prim *get_prim_index(const char *prim_str) {
 }
 
 
-char *get_dag_expr(dag_node *t) {
+char *get_dag_expr(const dag_node *t) {
     char *pname;
     if (t->primitive != 0xFFFF) {
         asprintf(&pname, "%s", primitive_set[t->primitive].name);
@@ -476,7 +476,6 @@ int cmp_tree(const void *a, const void *b) {
 tree **sort_k_min_trees(tree **array, int n, int size) {
     tree **k_min = (tree **)malloc(size * sizeof(*k_min));
     qsort(array, n, sizeof(tree *), cmp_tree);
-    //print_population(array, n, 0, 0);
     memcpy(k_min, array, size * sizeof(tree *));
     return k_min;
 }
@@ -484,7 +483,8 @@ tree **sort_k_min_trees(tree **array, int n, int size) {
 
 tree **get_k_min_trees(tree **arr, int n, int size) {
     if (size) {
-        if (size < min(min(0.02*n + 260, 0.06*n + 40.0), 60000)) {
+        //min(min(0.02*n + 260, 0.06*n + 40.0), 60000)
+        if (size < 0) {
             return sel_k_min_trees(arr, n, size);
         } else {
             return sort_k_min_trees(arr, n, size);
@@ -560,13 +560,145 @@ void print_domain(fit_t *data, uint32_t n, const uint32_t *format) {
 MAKE_REALLOC(fit_t);
 
 
-fit_t icompute_node_g(dag_node *t, const Engine *run) {
+#define COMPUTE_NODE_TEMPLATE(CODE) do {\
+    fit_t *res = (fit_t *)malloc(sizeof(*res) * run.fitness_cases);\
+    for(int i = 0; i < run.fitness_cases; ++i) {\
+        res[i] = CODE;\
+    }\
+    return res;\
+} while(0)
+
+
+fit_t *compute_add(fit_t *c1, fit_t *c2) {
+    COMPUTE_NODE_TEMPLATE(c1[i] + c2[i]);
+}
+
+
+fit_t *compute_sub(fit_t *c1, fit_t *c2) {
+    COMPUTE_NODE_TEMPLATE(c1[i] - c2[i]);
+}
+
+
+fit_t *compute_div(fit_t *c1, fit_t *c2) {
+    COMPUTE_NODE_TEMPLATE((c1[i] != 0.0 && c2[i] != 0.0) ? (c1[i] / c2[i]) : 0.0);
+}
+
+
+fit_t *compute_mul(fit_t *c1, fit_t *c2) {
+    COMPUTE_NODE_TEMPLATE(c1[i] * c2[i]);
+}
+
+
+fit_t *compute_sin(fit_t *c1) {
+    COMPUTE_NODE_TEMPLATE(sin(c1[i]));
+}
+
+
+fit_t *compute_cos(fit_t *c1) {
+    COMPUTE_NODE_TEMPLATE(cos(c1[i]));
+}
+
+
+fit_t *compute_tan(fit_t *c1) {
+    COMPUTE_NODE_TEMPLATE(tan(c1[i]));
+}
+
+
+fit_t *compute_if(fit_t *c1, fit_t *c2, fit_t *c3) {
+    COMPUTE_NODE_TEMPLATE((c3[i] < 0) ? c1[i] : c2[i]);
+}
+
+
+#define WAS_ALLOCATED(NODE) (((NODE)->primitive < VAR_START || (NODE)->primitive > VAR_END) && (!ENABLE_CACHE || (NODE)->candid <= -1))
+//#define WAS_ALLOCATED(NODE) !(((NODE)->primitive >= VAR_START && (NODE)->primitive <= VAR_END) || (ENABLE_CACHE && (NODE)->candid > -1))
+
+
+#define CALL_COMPUTE_NODE_TEMPLATE(N_CHILDS, CHILD_ACC, COMPUTE_FUNC) do {\
+    fit_t *childs[N_CHILDS];\
+    for(int i = 0; i < N_CHILDS; ++i) {\
+        childs[i] = serial_tensor_compute_node(CHILD_ACC);\
+    }\
+    printfd("allocating space for result of node %s\n", get_dag_expr(t));\
+    result = COMPUTE_FUNC;\
+    for(int i = 0; i < N_CHILDS; ++i) {\
+        if (WAS_ALLOCATED(CHILD_ACC)) {\
+            free(childs[i]);\
+        }\
+    }\
+}while(0)
+
+
+fit_t *serial_tensor_compute_node(const dag_node *t) {
+    const int is_cached = ENABLE_CACHE && t->candid > -1;
+    
+    //if (is_cached && cache.valid[t->candid]) {
+    //}
+    printfd("Entering fucntion! %s, mem: %d\n", primitive_set[t->primitive].name, allocated_mem);
+
+    if (is_cached && cache.valid[t->candid]) {
+        //printf("Retrieving node from cache: %s (pos %d)\n", get_dag_expr(t), t->candid);
+        printfd("Retrieving from cache(%p), at pos(%d, %p), %d bytes\n", cache.data, t->candid, &cache.data[run.fitness_cases * t->candid], run.fitness_cases);
+        cache.accesses++;
+        return &cache.data[run.fitness_cases * t->candid];
+    } else {
+        fit_t *result;
+        printfd("Doing switch! %s\n", primitive_set[t->primitive].name);
+        switch (t->primitive) {
+            case X: default:
+                result = &cache.vars[0];
+                break;
+            case Y:
+                result = &cache.vars[run.fitness_cases];
+                break;
+            case Scalar:
+                COMPUTE_NODE_TEMPLATE(t->children.f[0]);
+                break;
+            case Add: 
+                CALL_COMPUTE_NODE_TEMPLATE(2, t->children.n[i], compute_add(childs[0], childs[1]));
+                break;
+            case Sub:
+                CALL_COMPUTE_NODE_TEMPLATE(2, t->children.n[i], compute_sub(childs[0], childs[1]));
+                break;
+            case Div:
+                CALL_COMPUTE_NODE_TEMPLATE(2, t->children.n[i], compute_div(childs[0], childs[1]));
+                break;
+            case Mul:
+                CALL_COMPUTE_NODE_TEMPLATE(2, t->children.n[i], compute_mul(childs[0], childs[1]));
+                break;
+            case Cos:
+                CALL_COMPUTE_NODE_TEMPLATE(1, t->children.n[i], compute_cos(childs[0]));
+                break;
+            case Sin:
+                CALL_COMPUTE_NODE_TEMPLATE(1, t->children.n[i], compute_sin(childs[0]));
+                break;
+            case Tan:
+                CALL_COMPUTE_NODE_TEMPLATE(1, t->children.n[i], compute_tan(childs[0]));
+                break;
+            case If:
+                CALL_COMPUTE_NODE_TEMPLATE(3, t->children.n[i], compute_if(childs[0], childs[1], childs[2]));
+                break;
+        }
+        if (is_cached && !cache.valid[t->candid]) {
+            //fit_t *ptr_to_cache = &cache.data[t->candid * run.fitness_cases];
+            memcpy(&cache.data[t->candid * run.fitness_cases], result, sizeof(fit_t) * run.fitness_cases);
+            cache.valid[t->candid] = 1;
+            printfd("caching (and freeing) node %s (pos %d)\n", get_dag_expr(t), t->candid);
+            free(result);
+            cache.validated++;
+            return &cache.data[t->candid * run.fitness_cases];
+        }
+        return result;
+    }
+}
+
+
+fit_t icompute_node_g(const dag_node *t) {
     int is_cached = ENABLE_CACHE && t->candid > -1;
     
-    if (is_cached && cache->valid[t->candid]) {
-        if (run->index == 0) {
-            //printf("@@@@@@Result in cache!, %d, %s\n", run->index, get_dag_expr(t));
-            cache->accesses++;
+    if (is_cached && cache.valid[t->candid]) {
+        if (run.index == 0) {
+            //printf("@@@@@@Result in cache!, %d, %s\n", run.index, get_dag_expr(t));
+            cache.accesses++;
             /*
             printf("Found a cached node: \n");
             print_dag_node(t);
@@ -575,57 +707,58 @@ fit_t icompute_node_g(dag_node *t, const Engine *run) {
             print_cache(1);
             */
         }
-        return cache->data[t->candid * run->fitness_cases + run->index];
+        return cache.data[t->candid * run.fitness_cases + run.index];
     } else {
+
         fit_t result;
         switch(t->primitive) {
             case X: default:
-                result = run->cur_vars[0];
+                result = run.cur_vars[0];
                 break;
             case Y:
-                result = run->cur_vars[1];
+                result = run.cur_vars[1];
                 break;
             case Scalar:
                 result = t->children.f[0];
                 break;
             case Add: 
-                result = icompute_node_g(t->children.n[0], run) + icompute_node_g(t->children.n[1], run);
+                result = icompute_node_g(t->children.n[0]) + icompute_node_g(t->children.n[1]);
                 break;
             case Sub: 
-                result = icompute_node_g(t->children.n[0], run) - icompute_node_g(t->children.n[1], run);
+                result = icompute_node_g(t->children.n[0]) - icompute_node_g(t->children.n[1]);
                 break;
             case Div: {
-                fit_t c1 = icompute_node_g(t->children.n[0], run);
-                fit_t c2 = icompute_node_g(t->children.n[1], run);
+                fit_t c1 = icompute_node_g(t->children.n[0]);
+                fit_t c2 = icompute_node_g(t->children.n[1]);
                 result = (c1 != 0.0 && c2 != 0.0) ? (c1 / c2) : 0.0;
                 break;
             }
             case Mul:
-                result = icompute_node_g(t->children.n[0],run) * icompute_node_g(t->children.n[1], run);
+                result = icompute_node_g(t->children.n[0]) * icompute_node_g(t->children.n[1]);
                 break;
             case Cos:
-                result = cos(icompute_node_g(t->children.n[0],run));
+                result = cos(icompute_node_g(t->children.n[0]));
                 break;
             case Sin:
-                result = sin(icompute_node_g(t->children.n[0],run));
+                result = sin(icompute_node_g(t->children.n[0]));
                 break;
             case Tan:
-                result = tan(icompute_node_g(t->children.n[0],run));
+                result = tan(icompute_node_g(t->children.n[0]));
                 break;
             case If: {
-                fit_t c1 = icompute_node_g(t->children.n[0], run);
-                fit_t c2 = icompute_node_g(t->children.n[1], run);
-                fit_t c3 = icompute_node_g(t->children.n[2], run);
+                fit_t c1 = icompute_node_g(t->children.n[0]);
+                fit_t c2 = icompute_node_g(t->children.n[1]);
+                fit_t c3 = icompute_node_g(t->children.n[2]);
                 result = (c3 < 0) ? c1 : c2;      
                 }
                 break;
 
         }
-        if (is_cached && !cache->valid[t->candid]) {
-            cache->data[t->candid * run->fitness_cases + run->index] = result;
-            if (run->index == run->fitness_cases - 1) {
-                cache->valid[t->candid] = 1;
-                cache->validated++;
+        if (is_cached && !cache.valid[t->candid]) {
+            cache.data[t->candid * run.fitness_cases + run.index] = result;
+            if (run.index == run.fitness_cases - 1) {
+                cache.valid[t->candid] = 1;
+                cache.validated++;
             }
         }
         return result;
@@ -633,8 +766,8 @@ fit_t icompute_node_g(dag_node *t, const Engine *run) {
 }
 
 
-fit_t icompute_node_g_d(dag_node *t, const Engine *run) {
-    fit_t result = icompute_node_g(t, run);
+fit_t icompute_node_g_d(const dag_node *t) {
+    fit_t result = icompute_node_g(t);
     if (isinf(result) || isnan(result) || !isfinite(result)) {
         //printf("Bad operation (%s) between values %.3f and %.3f\n", primitive_set[t->primitive].name, c1, c2);
         printf("Bad operation (%s) between values: result: %.3f", primitive_set[t->primitive].name, result);
@@ -643,11 +776,12 @@ fit_t icompute_node_g_d(dag_node *t, const Engine *run) {
 }
 
 
-int calc_pop_fit(Engine *run, tree **population) {
+int calc_pop_fit(tree **population) {
     float best_fit = FLT_MAX;
     int best_ind = -1;
-    for(int i = 0; i < run->pop_size; ++i) {
-        float cur_fit = calc_tree_fit(run, population[i]);
+    for(int i = 0; i < run.pop_size; ++i) {
+        //print_tree(population[i]);
+        float cur_fit = calc_tree_fit(population[i]);
         //float cur_fit = no_tree_fit(population[i]);
         if(cur_fit < best_fit) {
             best_fit = cur_fit;
@@ -667,43 +801,49 @@ fit_t no_tree_fit(tree *t) {
 }
 
 
-fit_t calc_tree_fit(Engine *run, tree *t) {
-    /*if (ENABLE_CACHE) {
-        compute_domain_cache(t->dag);
+fit_t calc_tree_fit(tree *t) {
+    //print_tree(t, 0, 0);
+
+    if (TENSOR_CACHE) {
+        fit_t *domain = serial_tensor_compute_node(t->dag);
+        //print_domain(domain, fitness_cases, resolution); //debug
+        t->fitness = icalculate_fitness_g(domain);
+        if (WAS_ALLOCATED(t->dag)) {
+            free(domain);
+        }
     } else {
-        icompute_domain_g(t->dag);
-    }*/
 
-    fit_t *domain = icompute_domain_g(run, t->dag);
-
-    //print_domain(domain, fitness_cases, resolution); //debug
-    t->fitness = icalculate_fitness_g(run, domain);
+        fit_t *domain = icompute_domain_g(t->dag);
+        //print_domain(domain, fitness_cases, resolution); //debug
+        t->fitness = icalculate_fitness_g(domain);
+        free(domain);
+    }
     //printf("Fitness: %.6f\n", t->fitness); // debug
-    free(domain);
+
     return t->fitness;
 }
 
 
-fit_t *icompute_domain_g(Engine *run, dag_node *t) {
+fit_t *icompute_domain_g(dag_node *t) {
     int i;
-    fit_t *domain = (fit_t *)malloc(sizeof(*domain) * run->fitness_cases);
-    reset_cur_vars(run);
+    fit_t *domain = (fit_t *)malloc(sizeof(*domain) * run.fitness_cases);
+    reset_cur_vars();
 
-    for(i = 0; i < run->fitness_cases; ++i) {
-        domain[i] = icompute_node_g_d(t, run);
+    for(i = 0; i < run.fitness_cases; ++i) {
+        domain[i] = icompute_node_g_d(t);
         //domain[i] = 0;
 
         STEP_DOMAIN(run);
-        //printf("Updating index, %d\n", run->index);
+        //printf("Updating index, %d\n", run.index);
     }
     return domain;
 }
 
 
-fit_t icalculate_fitness_g(Engine *run, fit_t *values) {
-    float sq_sum = 0;
-    for(int i = 0; i < run->fitness_cases; ++i) {
-        sq_sum += pow(abs(run->target[i] - values[i]), 2.0);
+fit_t icalculate_fitness_g(fit_t *values) {
+    fit_t sq_sum = 0;
+    for(int i = 0; i < run.fitness_cases; ++i) {
+        sq_sum += (run.target[i] - values[i]) * (run.target[i] - values[i]);
     }
-    return sqrt(min(sq_sum, FLT_MAX) / (fit_t)(run->fitness_cases));
+    return sqrt(min(sq_sum, FLT_MAX) / (fit_t)(run.fitness_cases));
 }

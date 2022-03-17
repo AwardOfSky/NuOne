@@ -1,4 +1,4 @@
-//gcc -o test.exe -Wall -Ofast test.c gp.c hashmap.c utils.c genetics.c engine.c
+//gcc -o test.exe -Wall -Ofast test.c gp.c hashmap.c utils.c genetics.c engine.c cache.c
 #include <stdlib.h>
 #include <stdio.h>
 #include <time.h>
@@ -40,6 +40,7 @@ void test_list_same_arity();
 void test_sel_min(int n, int size);
 void test_point_mutation(uint32_t table_size, int stress);
 void test_evolution_v1();
+void test_evolution_v2();
 void test_realloc();
 void test_cache(size_t table_size);
 
@@ -83,9 +84,10 @@ int main() {
     // test_sel_min(10000, 10);
     
     //test_evolution_v1();
+    test_evolution_v2();
     //test_realloc();
     
-    test_cache(16);
+    //test_cache(16);
 
     printf("Exiting!\n");
 
@@ -97,14 +99,14 @@ void test_cache(size_t table_size) {
     uint32_t cache_s = 16;
     // tested shrink with cache size 16 (factor grow, shrink 2, 4) and grow with 3 (factor grow, shrink 2, 4)
 
-    Engine *run = create_params(1);
+    init_engine(1);
     for (int i = 0; i < DIMS; ++i) {
-        run->resolution[i] = 4;
-        run->MIN_DOMAIN[i] = -5;
-        run->MAX_DOMAIN[i] = 5;
+        run.resolution[i] = 4;
+        run.MIN_DOMAIN[i] = -5;
+        run.MAX_DOMAIN[i] = 5;
     }
-    setup(run, cache_s);
-    //print_domain(run->target, run->fitness_cases, run->resolution);
+    setup(cache_s);
+    //print_domain(run.target, run.fitness_cases, run.resolution);
     //print_params(run);
 
     HashTable *t1 = create_hashtable(table_size);
@@ -125,18 +127,23 @@ void test_cache(size_t table_size) {
 
     printf("Starting gen 1!\n");
     printf("Building cache...\n");
-    build_cache(t1, 0, run->fitness_cases);
+    build_cache(t1, 0);
     printf("Done!\n\n");
     printf("Updated node list: ");
     print_candidate_list(t1, 1);
     fit_t fitness;
-    fitness = calc_tree_fit(run, parent);
-    printf("Secind tree\n");
-    fitness = calc_tree_fit(run, parent1);
-    print_cache(run->resolution, 1);
+    printf("First tree\n");
+    print_tree(parent, 0, 0);
+    fitness = calc_tree_fit(parent);
+    
+    printf("Second tree\n");
+    print_tree(parent1, 0, 0);
+    fitness = calc_tree_fit(parent1);
+    
+    print_cache(run.resolution, 1);
 
     printf("Starting gen 2!\n");
-    const char *gen2genotype = "add(if(sin(x), tan(y), add(y, y)), if(sin(x), tan(y), add(y, y)))";
+    //const char *gen2genotype = "add(if(sin(x), tan(y), add(y, y)), if(sin(x), tan(y), add(y, y)))";
     //tree *parent2 = str_to_tree(t2, gen2genotype);
 
     tree *parent2 = subtree_crossover_d(parent, parent, t2, 2, 9, All_Prims, All_Prims, 10);
@@ -144,13 +151,13 @@ void test_cache(size_t table_size) {
     print_tree(parent2, 1, 0);
 
     printf("Building cache gen 2...\n");
-    build_cache(t2, 1, run->fitness_cases);
+    build_cache(t2, 1);
     printf("Done!\n\n");
     printf("Updated node list: ");
     print_candidate_list(t2, 1);
-    fitness = calc_tree_fit(run, parent2);
+    fitness = calc_tree_fit(parent2);
     printf("Done!\n");
-    print_cache(run->resolution, 1);
+    print_cache(run.resolution, 1);
 
 
     printf("The fitness was (do not optimize): %.3f\n", fitness);
@@ -159,7 +166,7 @@ void test_cache(size_t table_size) {
     free(t1);
     free(t2);
     free(parent);
-    cleanup(run);
+    cleanup();
     printf("Done!\nCleanup done, let's exit!\n");
 }
 
@@ -178,32 +185,62 @@ void test_realloc() {
 
 
 void test_evolution_v1() {
-    Engine *run = create_params(1);
+    init_engine(1);
 
     // specific vars
-    run->generations = 5;
-    run->pop_size = 20;
-    run->tournament_size = 3;
-    run->gen_method = Ramped;
-    run->allowed_depth.min = 2;
-    run->allowed_depth.max = 10;
-    run->init_depth.min = 2;
-    run->init_depth.max = 6;
-    run->debug = 1;
-    run->elitism = 0.2;
+    run.generations = 5;
+    run.pop_size = 20;
+    run.tournament_size = 3;
+    run.gen_method = Ramped;
+    run.allowed_depth.min = 2;
+    run.allowed_depth.max = 10;
+    run.init_depth.min = 2;
+    run.init_depth.max = 6;
+    run.debug = 1;
+    run.elitism = 0.2;
     for (int i = 0; i < DIMS; ++i) {
-        run->resolution[i] = 256;
-        run->MIN_DOMAIN[i] = -5;
-        run->MAX_DOMAIN[i] = 5;
+        run.resolution[i] = 256;
+        run.MIN_DOMAIN[i] = -5;
+        run.MAX_DOMAIN[i] = 5;
     }
 
-    setup(run, 1);
+    setup(10);
 
-    //print_domain(run->target, run->fitness_cases, run->resolution);
-    print_params(run);
+    //print_domain(run.target, run.fitness_cases, run.resolution);
+    print_params();
     
-    evolve(run);
-    cleanup(run);
+    evolve();
+    cleanup();
+}
+
+
+void test_evolution_v2() {
+    init_engine(1);
+
+    // specific vars
+    run.generations = 1000;
+    run.pop_size = 100;
+    run.tournament_size = 3;
+    run.gen_method = Ramped;
+    run.allowed_depth.min = 2;
+    run.allowed_depth.max = 25;
+    run.init_depth.min = 2;
+    run.init_depth.max = 6;
+    run.debug = 1;
+    run.elitism = 0.2;
+    for (int i = 0; i < DIMS; ++i) {
+        run.resolution[i] = 256;
+        run.MIN_DOMAIN[i] = -5;
+        run.MAX_DOMAIN[i] = 5;
+    }
+
+    setup(10);
+
+    //print_domain(run.target, run.fitness_cases, run.resolution);
+    print_params();
+    
+    evolve();
+    cleanup();
 }
 
 
