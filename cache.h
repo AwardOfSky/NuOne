@@ -10,11 +10,12 @@
 // which in turn promotes bigger cache sizes
 // a higher growth factor means that is easier (or more likely) to grow the cache,
 // which also promotes bigger cache sizes
+// @deprecated ^ 
+
 #define OA_NODES 4
 #define RADIX_SORT_THRESH 128
-#define UPDATE_CACHE_N_GEN 1
 #define FACTOR_TO_GROW_CACHE 2
-#define FACTOR_TO_SHRINK_CACHE 4
+#define FACTOR_TO_SHRINK_CACHE 3
 #define FACTOR_TO_GROW_CANDLIST 2
 #define MAX_CACHE_MEMORY (1024 * 1024 * 1024)
 #define MAX_CACHE_SIZE 16384
@@ -23,7 +24,12 @@
 #define MIN_CACHE_REQ 0
 #define IMPORTANCE(FREQ, NODES) (FREQ * NODES)
 #define INIT_CACHE_SIZE 1024
-#define INIT_CAND_SIZE 1024
+#define INIT_CAND_SIZE 4
+#define GROW_CACHE_N_GEN 1
+#define SHRINK_CACHE_N_GEN 5
+#define SUB_CAND_IMP_DEP_LIM 2
+
+
 
 // 16 bytes
 typedef struct cache_node {
@@ -44,6 +50,9 @@ typedef struct Cache {
 } Cache;
 
 Cache cache;
+
+int get_cand_imp_to_sub(HashTable *t, dag_node *dag, int32_t dep_lim);
+void subtract_cand_imp(HashTable *t, dag_node *dag, int dep_lim, int *imp, int *freq);
 fit_t *realloc_fit_t1(fit_t *data, const size_t new_size, size_t *sptr);
 void handle_candidates(dag_node *dag, HashTable *t, int ind);
 void init_cache(size_t n);

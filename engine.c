@@ -243,11 +243,14 @@ int evolve() {
     HashTable *newt;
 
     double gen_duration;
+    printf("Generating pop...");
     tree **population = generate_population(curt, run.gen_method,
                                             run.init_depth.min, run.init_depth.max,
                                             run.pop_size, run.term_prob);
+    printf("Done\n");
 
-    if (debug) print_population(population, run.pop_size, 0, 0);
+
+    if (0) print_population(population, run.pop_size, 0, 0);
     
     tree **new_pop = (tree **)malloc(sizeof(tree *) * run.pop_size);
     tree **best_trees = (tree **)malloc(sizeof(tree *) * elitism_n);
@@ -340,7 +343,6 @@ int evolve() {
                 //print_cache(0);
             }
         }
-
 
         // calculate fitness of new population
         if (ENABLE_CACHE) {

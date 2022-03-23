@@ -41,6 +41,7 @@ void test_sel_min(int n, int size);
 void test_point_mutation(uint32_t table_size, int stress);
 void test_evolution_v1();
 void test_evolution_v2();
+void test_evolution_v3();
 void test_realloc();
 void test_cache(size_t table_size);
 
@@ -84,6 +85,7 @@ int main() {
     // test_sel_min(10000, 10);
     
     //test_evolution_v1();
+    //test_evolution_v2();
     test_evolution_v2();
     //test_realloc();
     
@@ -218,18 +220,18 @@ void test_evolution_v2() {
     init_engine(1);
 
     // specific vars
-    run.generations = 1000;
+    run.generations = 30;
     run.pop_size = 100;
     run.tournament_size = 3;
     run.gen_method = Ramped;
     run.allowed_depth.min = 2;
     run.allowed_depth.max = 25;
     run.init_depth.min = 2;
-    run.init_depth.max = 6;
+    run.init_depth.max = 20;
     run.debug = 1;
     run.elitism = 0.2;
     for (int i = 0; i < DIMS; ++i) {
-        run.resolution[i] = 256;
+        run.resolution[i] = 16;
         run.MIN_DOMAIN[i] = -5;
         run.MAX_DOMAIN[i] = 5;
     }
@@ -243,6 +245,36 @@ void test_evolution_v2() {
     cleanup();
 }
 
+
+
+void test_evolution_v3() {
+    init_engine(1);
+
+    // specific vars
+    run.generations = 2;
+    run.pop_size = 5;
+    run.tournament_size = 3;
+    run.gen_method = Ramped;
+    run.allowed_depth.min = 2;
+    run.allowed_depth.max = 25;
+    run.init_depth.min = 2;
+    run.init_depth.max = 10;
+    run.debug = 1;
+    run.elitism = 0.2;
+    for (int i = 0; i < DIMS; ++i) {
+        run.resolution[i] = 16;
+        run.MIN_DOMAIN[i] = -5;
+        run.MAX_DOMAIN[i] = 5;
+    }
+
+    setup(10);
+
+    //print_domain(run.target, run.fitness_cases, run.resolution);
+    print_params();
+    
+    evolve();
+    cleanup();
+}
 
 void test_subtree_crossover(uint32_t table_size, int stress) {
     HashTable *t1 = create_hashtable(table_size);

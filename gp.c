@@ -781,6 +781,7 @@ int calc_pop_fit(tree **population) {
     int best_ind = -1;
     for(int i = 0; i < run.pop_size; ++i) {
         //print_tree(population[i]);
+        printfd("Calculating tree i: %d\n", i);
         float cur_fit = calc_tree_fit(population[i]);
         //float cur_fit = no_tree_fit(population[i]);
         if(cur_fit < best_fit) {
@@ -818,7 +819,7 @@ fit_t calc_tree_fit(tree *t) {
         t->fitness = icalculate_fitness_g(domain);
         free(domain);
     }
-    //printf("Fitness: %.6f\n", t->fitness); // debug
+    //if (run.cur_gen == 29) printf("Fitness: %.6f\n", t->fitness); // debug
 
     return t->fitness;
 }
