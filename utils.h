@@ -11,6 +11,7 @@
 
 #define STACK_ALLOC 1024
 #define BINSEARCH_TRESHOLD 32
+#define NUM_THREADS 8
 // bits in a byte
 #define CHAR_BITS 8
 
@@ -76,23 +77,46 @@
     }
 
 
+// if (!strcmp("fit_t", #T)) {
+//     printf("We are on the float thing\n");
+// }
+
 // reallocing arrays of arbitrary type. Note: realloc returns NULL if size is 0 but no error, hence the check
+
+// #define DECLARE_REALLOC(T)                                                                              
+//     T *realloc_##T(T *data, const uint32_t new_size, uint32_t *sptr)
+// #define MAKE_REALLOC(T)                                                                                 
+//     DECLARE_REALLOC(T) {                                                                                
+//         T *tp = (T*)realloc(data, sizeof(*tp) * new_size);                                              
+//         if (tp != NULL || new_size == 0) {                                                              
+//             data = tp;                                                                                  
+//             if (sptr != NULL) {                                                                         
+//                 *sptr = new_size;                                                                       
+//             }                                                                                           
+//         } else {                                                                                        
+//             printf(PREERR"OOM: Failed to realloc array of type "#T", on memory address %p. ", data);    
+//             printf("Requested %lu bytes.\n", sizeof(*data) * new_size);                               
+//         }                                                                                               
+//         return data;                                                                                    
+//     }                            
+
+
 #define DECLARE_REALLOC(T)                                                                              \
-    T *realloc_##T(T *data, const size_t new_size, size_t *sptr)
+    void realloc_##T(T **data, const uint32_t new_size, uint32_t *sptr)
 #define MAKE_REALLOC(T)                                                                                 \
     DECLARE_REALLOC(T) {                                                                                \
-        T *tp = (T*)realloc(data, sizeof(*tp) * new_size);                                              \
+        T *tp = (T*)realloc(*data, sizeof(*tp) * new_size);                                              \
         if (tp != NULL || new_size == 0) {                                                              \
-            data = tp;                                                                                  \
+            *data = tp;                                                                                  \
             if (sptr != NULL) {                                                                         \
                 *sptr = new_size;                                                                       \
             }                                                                                           \
         } else {                                                                                        \
-            printf(PREERR"OOM: Failed to realloc array of type "#T", on memory address %p. ", data);    \
-            printf("Requested %I64d bytes.\n", sizeof(*data) * new_size);                               \
+            printf(PREERR"OOM: Failed to realloc array of type ""char"", on memory address %p. ", *data);\
+            printf("Requested %lu bytes.\n", sizeof(**data) * new_size);                            \
         }                                                                                               \
-        return data;                                                                                    \
-    }                            
+    }      \
+
 
 
 //DECLARE_COMPUTE_STD(int);
@@ -103,8 +127,8 @@ DECLARE_REALLOC(float);
 DECLARE_REALLOC(char);
 
 float rand_float();
-int vasprintf(char **strp, const char *format, va_list ap);
-int asprintf(char **strp, const char *format, ...);
+// int vasprintf(char **strp, const char *format, va_list ap);
+// int asprintf(char **strp, const char *format, ...);
 uint32_t next_power_2(uint32_t n);
 int *range_random_sample(int n, int size);
 int *sel_k_min(int *arr, int n, int size);

@@ -15,7 +15,9 @@ void handle_candidates(dag_node *dag, HashTable *t, int ind) {
                     //printf(PREWARN"Candidate list full.\n");
                     return;
                 }
-                t->candidates = realloc_cache_node(t->candidates, t->cand_size * FACTOR_TO_GROW_CANDLIST, (size_t *)(&(t->cand_size)));
+
+                //t->candidates = realloc_cache_node(t->candidates , t->cand_size * FACTOR_TO_GROW_CANDLIST, (uint32_t *)(&(t->cand_size)));
+                realloc_cache_node(&(t->candidates), t->cand_size * FACTOR_TO_GROW_CANDLIST, (uint32_t *)(&(t->cand_size)));
             }
             //if (t->cand_index >= 4) printf("new cand node! %d %d\n", t->cand_index, ind);
 
@@ -67,24 +69,9 @@ void free_cache() {
 }
 
 
-fit_t *realloc_fit_t1(fit_t *data, const size_t new_size, size_t *sptr) {
-    fit_t *tp = (fit_t*)realloc(data, sizeof(fit_t) * new_size);
-    if (tp != NULL || new_size == 0) {
-        data = tp;
-        if (sptr != NULL) {
-            *sptr = new_size;
-        }
-    } else {
-        printf(PREERR"OOM: Failed to realloc array of type fit_t, on memory address %p. ", data);
-        printf("Requested %I64d bytes.\n", sizeof(*data) * new_size);
-    }
-    return data;
-}            
-
-
 void realloc_cache(uint32_t new_size) {
-    cache.valid = realloc_char(cache.valid, new_size, (size_t *)(&(cache.size)));
-    cache.data = realloc_fit_t1(cache.data, new_size * run.fitness_cases, NULL);
+    realloc_char(&(cache.valid), new_size, (uint32_t *)(&(cache.size)));
+    realloc_fit_t(&(cache.data), new_size * run.fitness_cases, NULL);
 }
 
 
@@ -122,12 +109,6 @@ void subtract_cand_imp(HashTable *t, dag_node *dag, int dep_lim, int *imp, int *
         if (child->candid < -1) {
             int am = t->candidates[-(child->candid) - 2].dag->n_offspring * (*freq);
             *imp -= am;
-            if (*imp < 0) {
-                printf("Oh no! something is happening!\n");
-            }
-            //printf("Dag at cand index %d is son, going to subtract amount %d\n", -(child->candid) - 2, am);
-            //printf("The dag in question is %s\n", get_dag_expr(t->candidates[-(child->candid) - 2].dag));
-            //printf("@@@@@@@Something here?\n");
         } else if ((dep_lim != 1) && IS_FUNC(child->primitive, child->arity)) {
             subtract_cand_imp(t, child, dep_lim - 1, imp, freq);
         }
@@ -161,16 +142,25 @@ void build_cache(HashTable *t, int gen) {
     // 0 - check if we need to grow the cache
     int shrink = 1;
     if ((t->cand_index >= cache.size) && !((gen + 1) % GROW_CACHE_N_GEN)) {
-        uint32_t tentative_size = max(next_power_2(t->cand_index), cache.size * FACTOR_TO_GROW_CACHE); // it can be this for now
         
-        printfd("Tentative size: %d\n", tentative_size);
-
-        if ((tentative_size <= MAX_CACHE_SIZE) && (tentative_size * run.fitness_cases * sizeof(fit_t) <= MAX_CACHE_MEMORY)) {
+        uint32_t tentative_size = max(next_power_2(t->cand_index), cache.size * FACTOR_TO_GROW_CACHE);
+        if (MAX_CACHE_SIZE != -1) {
+            tentative_size = min(tentative_size, MAX_CACHE_SIZE);
+        }
+        if (MAX_CACHE_MEMORY != -1) {
+            tentative_size = min(tentative_size, MAX_CACHE_MEMORY / (run.fitness_cases * sizeof(fit_t)));
+        }
+        if (tentative_size > cache.size) {
             shrink = 0;
             realloc_cache(tentative_size);
         } else {
-            printf(PREWARN"Cache is at 100%% capacity, cannot grow.\n");
+            printf("\n"PREWARN"Cache is at 100%% capacity, cannot grow.\n");
+            printf("Current cache (size, memory): (%d, %ld), out of (%d, %d)\n", 
+                cache.size, cache.size * run.fitness_cases * sizeof(fit_t),
+                MAX_CACHE_SIZE, MAX_CACHE_MEMORY);
+            printf("Tentative cache (size, memory): (%d, %ld)\n\n", tentative_size, tentative_size * run.fitness_cases * sizeof(fit_t));
         }
+
         printfd("Grow: Cache size, cand index: %d %d\n", cache.size, t->cand_index);
     }
 
@@ -226,7 +216,7 @@ void build_cache(HashTable *t, int gen) {
         }
     }
 
-    // 4 - assing empty spaces in cache for new dags
+    // 4 - assign empty spaces in cache for new dags
     int index_to_assign = 0;
     for(i = 0; i < n_candidates; ++i) {
         if (t->candidates[i].index == -1) { // new dag node
@@ -270,9 +260,24 @@ void build_cache(HashTable *t, int gen) {
         
         // 5.5 - actually shrink the cache
         realloc_cache(cache.size >> 1);
-        printf("Shrink: Cache size, cand index: %d %d\n", cache.size, t->cand_index);
+        printfd("Shrink: Cache size, cand index: %d %d\n", cache.size, t->cand_index);
     }
 }
 
 
 MAKE_REALLOC(cache_node);
+MAKE_REALLOC(fit_t);
+
+// fit_t *realloc_fit_t(fit_t *data, const uint32_t new_size, uint32_t *sptr) {
+//     fit_t *tp = (fit_t*)realloc(data, sizeof(*tp) * new_size);
+//     if (tp != NULL || new_size == 0) { 
+//         data = tp; 
+//         if (sptr != NULL) { 
+//             *sptr = new_size;
+//         }
+//     } else { 
+//         printf(PREERR"OOM: Failed to realloc array of type ""fit_t"", on memory address %p. ", data);
+//         printf("Requested %lu bytes.\n", sizeof(*data) * new_size);
+//     }
+//     return data;
+// };

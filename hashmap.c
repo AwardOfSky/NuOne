@@ -1,5 +1,6 @@
 #include <stdio.h>
 #include <stdlib.h>
+#include <limits.h>
 #include "gp.h"
 
 
@@ -30,6 +31,15 @@ HashTable *create_hashtable(uint32_t n) {
         htable->table[n + i].node.children.f = htable->scalar_ptrs[0]; // make something not NULL to be accepted to memcmp 
     }
     return htable;
+}
+
+
+void free_hashtable(HashTable *t) {
+    delete_dag_table(t->table, t->size + (OA_NODES - 1));
+    free_scalar_ptrs(t);
+    free_child_ptrs(t);
+    free(t->candidates);
+    free(t);
 }
 
 
@@ -100,20 +110,14 @@ void print_table_stats(b_node *table, int n, int do_extra_stats) {
 
 void free_scalar_ptrs(HashTable *t) {
     FREE_PTRS(t, scalar_ptrs, scalar_arr);
+    free(t->scalar_ptrs);
+    //do { for(int i = 0; i <= t->scalar_arr; ++i) { free(t->scalar_ptrs[i]); } } while(0);
 }
 
 
 void free_child_ptrs(HashTable *t) {
     FREE_PTRS(t, child_ptrs, child_arr);
-}
-
-
-void free_hashtable(HashTable *t) {
-    delete_dag_table(t->table, t->size + (OA_NODES - 1));
-    free_scalar_ptrs(t);
-    free_child_ptrs(t);
-    free(t->candidates);
-    free(t);
+    free(t->child_ptrs);
 }
 
 
@@ -189,7 +193,6 @@ dag_node *add_dag_node(HashTable *t, uint32_t primitive, c_node children) {
     return add_dag_node_index(t, primitive, children, -1);
 }
 
-
 dag_node *add_dag_node_index(HashTable *t, uint32_t primitive, c_node children, int ind) {
     dag_node *dag;
 
@@ -251,10 +254,10 @@ dag_node *add_dag_node_index(HashTable *t, uint32_t primitive, c_node children, 
             } else {
                 t->scalar_ind = max(0, t->scalar_ind - arity);
             }
-            
-            if (ENABLE_CACHE) {
-                handle_candidates(dag, t, ind);
-            }
+        }
+        
+        if (ENABLE_CACHE) {
+            handle_candidates(dag, t, ind);
         }
 
     } else { // otimization for terminal set variables (x, y, z...)

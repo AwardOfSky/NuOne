@@ -1,4 +1,6 @@
 //gcc -o test.exe -Wall -Ofast test.c gp.c hashmap.c utils.c genetics.c engine.c cache.c
+//gcc -fcommon -Wall -lm -O0 -fno-fast-math -march=native test.c gp.c hashmap.c utils.c genetics.c engine.c cache.c -o test
+//gcc -fcommon -fopenmp -Wall -O3 -march=native test.c gp.c hashmap.c utils.c genetics.c engine.c cache.c -o test -lm
 #include <stdlib.h>
 #include <stdio.h>
 #include <time.h>
@@ -177,8 +179,8 @@ void test_realloc() {
     int size = 5; 
     float *arr = malloc(size * sizeof(float));
     printf("Size of array: %d\n", size);
-    arr = realloc_float(arr, 100000000000, (size_t *)(&size));
-    //arr = realloc(arr, 100000000000)
+    realloc_float(&arr, 1000000000, (uint32_t *)(&size));
+    //arr = realloc(arr, 1000000000)
     //arr = realloc_float(arr, 0, (size_t *)(&size));
     //arr = realloc(arr, 0)
     printf("Size of array: %d\n", size);
@@ -220,7 +222,7 @@ void test_evolution_v2() {
     init_engine(1);
 
     // specific vars
-    run.generations = 30;
+    run.generations = 50;
     run.pop_size = 100;
     run.tournament_size = 3;
     run.gen_method = Ramped;
@@ -246,28 +248,29 @@ void test_evolution_v2() {
 }
 
 
-
 void test_evolution_v3() {
     init_engine(1);
 
     // specific vars
-    run.generations = 2;
-    run.pop_size = 5;
-    run.tournament_size = 3;
+    run.generations = 50;
+    run.pop_size = 3;
+    run.mut_rate = 0.0;
+    run.cross_rate = 0.0;
+    run.tournament_size = 2;
     run.gen_method = Ramped;
-    run.allowed_depth.min = 2;
-    run.allowed_depth.max = 25;
-    run.init_depth.min = 2;
-    run.init_depth.max = 10;
+    run.allowed_depth.min = 1;
+    run.allowed_depth.max = 5;
+    run.init_depth.min = 1;
+    run.init_depth.max = 3;
     run.debug = 1;
-    run.elitism = 0.2;
+    run.elitism = 1.0;
     for (int i = 0; i < DIMS; ++i) {
         run.resolution[i] = 16;
         run.MIN_DOMAIN[i] = -5;
         run.MAX_DOMAIN[i] = 5;
     }
 
-    setup(10);
+    setup(INIT_CACHE_SIZE);
 
     //print_domain(run.target, run.fitness_cases, run.resolution);
     print_params();
@@ -275,6 +278,7 @@ void test_evolution_v3() {
     evolve();
     cleanup();
 }
+
 
 void test_subtree_crossover(uint32_t table_size, int stress) {
     HashTable *t1 = create_hashtable(table_size);
@@ -349,7 +353,12 @@ void test_tree_generation(uint32_t table_size, int method, int mind, int maxd) {
 
     tree *result = generate_tree(t1, method, mind, maxd, 0.33);
     printf("Expression:\n");
-    printf("%s\n", get_dag_expr(result->dag));
+
+    if (PDEBUG) {
+        char *temp_str = get_dag_expr(result->dag); 
+        printf("%s\n", temp_str);
+        free(temp_str);
+    }
 
     printf("\nCurrent Hashtable:\n");
     print_dag_table(t1->table, table_size);
@@ -378,7 +387,13 @@ void test_tree_creation(uint32_t table_size, int stress) {
     }
     
     if (!stress) printf("Confirm expression:\n");
-    printf("%s\n", get_dag_expr(result->dag));
+
+    if (PDEBUG) {
+        char *temp_str = get_dag_expr(result->dag);
+        printf("%s\n", temp_str);
+        free(temp_str);
+    }
+
     if (!stress) printf("Now in fancy:\n");
     if (!stress) fancy_dag_print(result->dag);
     

@@ -9,9 +9,9 @@ float rand_float() {
     return (float)rand() / (float)RAND_MAX;
 }
 
-
+/*
 int vasprintf(char **strp, const char *format, va_list ap) {
-    int len = _vscprintf(format, ap);
+    int len = vsnprintf(NULL, 0, format, ap);
     if (len == -1) return -1;
     char *str = (char*)malloc((size_t) len + 1);
     if (!str) return -1;
@@ -32,7 +32,7 @@ int asprintf(char **strp, const char *format, ...) {
     va_end(ap);
     return retval;
 }
-
+*/
 
 uint32_t next_power_2(uint32_t n) {
     --n;
@@ -70,9 +70,9 @@ int *range_random_sample(int n, int size) {
                 helper[index] = 1;
                 result[i] = index;
             }
+
         } else {
             sampling_size = n - size;
-
             for(int i = 0; i < sampling_size; ++i) {
                 int index = rand() % n;
                 while(helper[index] == 1) {

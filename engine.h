@@ -65,6 +65,7 @@ void cleanup();
 uint64_t calculate_stats(tree **population);
 void print_gen_statistics(tree **population, double duration);
 int evolve();
+void free_population(tree **population, uint32_t pop_size);
 
 
 #endif

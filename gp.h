@@ -60,15 +60,15 @@ typedef float domain_t;
 #define GENERATE_TERMINAL(TABLE, DUMMY) generate_program(TABLE, Full, 0, 0, 0.5, &DUMMY);
 
 
-#define STEP_DOMAIN(RUN) do {                                                                               \
-    int index = 0;                                                                                          \
-    run.cur_vars[0] += run.STEP[0];                                                                       \
+#define STEP_DOMAIN(RUN) do {                                                                            \
+    int index = 0;                                                                                       \
+    run.cur_vars[0] += run.STEP[0];                                                                      \
     while((run.cur_vars[index] > run.MAX_DOMAIN[index] + run.STEP[index] / 2.0) && (index + 1 < DIMS)) { \
-        run.cur_vars[index] = run.MIN_DOMAIN[index];                                                      \
-        ++index;                                                                                            \
-        run.cur_vars[index] += run.STEP[index];                                                           \
-    }                                                                                                       \
-    run.index++;                                                                                           \
+        run.cur_vars[index] = run.MIN_DOMAIN[index];                                                     \
+        ++index;                                                                                         \
+        run.cur_vars[index] += run.STEP[index];                                                          \
+    }                                                                                                    \
+    run.index++;                                                                                         \
 } while(0)
 
 
@@ -157,7 +157,6 @@ dag_node *str_to_dag(HashTable *table, const char **strp, int depth, tree *stats
 Prim *get_prim_index(const char *prim_str);
 prim_index_type *get_list_same_arity(int arity, int *n, int exclude, int ignore_specific, int search_set);
 prim_index_type get_prim_same_arity(int arity, int exclude, int ignore_specific, int search_set);
-char *get_dag_expr(const dag_node *t);
 void print_tree(tree *t, int print_stats, int do_fancy);
 void print_population(tree **population, int n, int generation, int do_fancy);
 dag_node *get_dag_node_cnt(dag_node *node, uint32_t *count, const int mode);
@@ -172,7 +171,6 @@ tree **get_k_min_trees(tree **arr, int n, int size);
 tree **sel_k_min_trees(tree **arr, int n, int size);
 
 void print_domain(fit_t *data, uint32_t n, const uint32_t *format);
-DECLARE_REALLOC(fit_t);
 
 fit_t *compute_add(float *c1, float *c2);
 fit_t *compute_sub(float *c1, float *c2);
@@ -183,14 +181,18 @@ fit_t *compute_cos(float *c1);
 fit_t *compute_tan(float *c1);
 fit_t *compute_if(float *c1, float *c2, float *c3);
 
-fit_t *serial_tensor_compute_node(const dag_node *t);
-fit_t icompute_node_g(const dag_node *t);
-fit_t icompute_node_g_d(const dag_node *t);
+fit_t *compute_node_cache(const dag_node *t);
+fit_t compute_node(const dag_node *t);
+fit_t compute_node_debug(const dag_node *t);
 int calc_pop_fit(tree **population);
 fit_t no_tree_fit(tree *t);
 fit_t calc_tree_fit(tree *t);
-fit_t *icompute_domain_g(dag_node *t);
-fit_t icalculate_fitness_g(fit_t *values);
+fit_t *compute_domain(dag_node *t);
+fit_t compute_fitness(fit_t *values);
+
+char *get_dag_expr(const dag_node *t);
+void safe_strcat(char **strp, char *to_add, uint32_t *pos, uint32_t *sptr);
+void get_dag_expr_w(const dag_node *t, char **strp, uint32_t *pos, uint32_t *sptr);
 
 
 #endif

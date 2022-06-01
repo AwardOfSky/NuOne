@@ -17,8 +17,13 @@
 #define FACTOR_TO_GROW_CACHE 2
 #define FACTOR_TO_SHRINK_CACHE 3
 #define FACTOR_TO_GROW_CANDLIST 2
+
+// Both the max cache memory (in bytes) and the max cache size can be set to -1
+// to ignore the setting. Setting both macros to -1 is not advisable
+// as it will allow the cache to grow without boundaries!
 #define MAX_CACHE_MEMORY (1024 * 1024 * 1024)
 #define MAX_CACHE_SIZE 16384
+
 #define MIN_CACHE_SIZE 2
 #define MAX_CACHE_CANDIDATES 65536
 #define MIN_CACHE_REQ 0
@@ -53,11 +58,16 @@ Cache cache;
 
 int get_cand_imp_to_sub(HashTable *t, dag_node *dag, int32_t dep_lim);
 void subtract_cand_imp(HashTable *t, dag_node *dag, int dep_lim, int *imp, int *freq);
-fit_t *realloc_fit_t1(fit_t *data, const size_t new_size, size_t *sptr);
 void handle_candidates(dag_node *dag, HashTable *t, int ind);
 void init_cache(size_t n);
 void free_cache();
+
 DECLARE_REALLOC(cache_node);
+DECLARE_REALLOC(fit_t);
+// float *realloc_fit_t(float *data, const uint32_t new_size, uint32_t *sptr);
+
+//fit_t *realloc_fit_t(fit_t *data, const uint32_t new_size, uint32_t *sptr);
+
 void realloc_cache(uint32_t new_size);
 void print_cache(uint32_t *format, int print_invalid);
 int cmp_candidates(const void *a, const void *b);

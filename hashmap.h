@@ -11,7 +11,7 @@
 #define MAX_SCALAR_SIZE 1073741824
 #define MAX_CHILD_SIZE 1073741824
 #define N_CHILDREN_ARR 64
-#define INIT_HASHMAP_SIZE 65535
+#define INIT_HASHMAP_SIZE 65536
 
 
 #define ALLOC_PTRS(T, PTRS, IND, ARR, SIZE, TYPE, MSG) do {                             \

@@ -1,6 +1,7 @@
 #include <stdio.h>
 #include <stdlib.h>
 #include <float.h>
+#include <limits.h>
 #include "gp.h"
 
 tree *subtree_crossover(tree *p1, tree *p2, HashTable *to_table, const int max_dep) {
@@ -22,7 +23,12 @@ tree *subtree_crossover_d(tree *p1, tree *p2, HashTable *to_table, int c1, int c
         uint32_t count_p2 = c2;
         tree *subtree_in_p2 = create_tree();
 
-        printfd("Tree in p2: %s\n", get_dag_expr(p2->dag));
+        if (PDEBUG) {
+            char *temp_str = get_dag_expr(p2->dag);
+            printfd("Tree in p2: %s\n", temp_str);
+            free(temp_str);
+        }
+
         printfd("(cp2, m2): (%d, %d)\n", count_p2, mode_p2);
         subtree_in_p2->dag = get_dag_node_cnt(p2->dag, &count_p2, mode_p2);
 
@@ -31,8 +37,11 @@ tree *subtree_crossover_d(tree *p1, tree *p2, HashTable *to_table, int c1, int c
             subtree_in_p2->depth = subtree_dep;
             
             printfd("Depth of subtree in p2: %d\n", subtree_dep);
-            printfd("Subtree in p2: %s\n", get_dag_expr(subtree_in_p2->dag));
-            
+            if (PDEBUG) {
+                char *temp_str = get_dag_expr(subtree_in_p2->dag);
+                printfd("Subtree in p2: %s\n", temp_str);
+                free(temp_str);
+            }
             //fancy_dag_print(subtree_in_p2->dag);
 
             res_tree->mode = m1;
@@ -43,6 +52,7 @@ tree *subtree_crossover_d(tree *p1, tree *p2, HashTable *to_table, int c1, int c
             free(res_tree);
             return copy_tree(p1, to_table);
         }
+        free(subtree_in_p2);
     } else {
         printf(PREERR"Failed crossover operation: one of the trees is empty.\n");
     }

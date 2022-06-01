@@ -159,6 +159,7 @@ void free_engine() {
     free_cache(cache);
     free_stats(run.stats);
     free(run.stats);
+    free(run.target);
 }
 
 
@@ -223,7 +224,7 @@ void print_gen_statistics(tree **population, double duration) {
         printf("[       |              FITNESS             |               DEPTH              |                     NODES                        | TIMINGS(s) ]\n");
         printf("[  gen  |    avg    ,    std    ,   best   |    avg    ,    std    ,   best   |    avg    ,    std    ,   best   ,   GPops(/s)   |    eval    ]\n");
     }
-    printf("[ %-6d| %-10.6f, %-10.6f, %-9.6f| %-10.6f, %-10.6f, %-9d| %-10.6f, %-10.6f, %-9d, %-14I64d| %-10.3f ]\n",
+    printf("[ %-6d| %-10.6f, %-10.6f, %-9.6f| %-10.6f, %-10.6f, %-9d| %-10.6f, %-10.6f, %-9d, %-14lu| %-10.3f ]\n",
         run.cur_gen, s->fit_hist[Average][g], s->fit_hist[StandardDev][g], s->fit_hist[Best][g],
         s->dep_hist[Average][g], s->dep_hist[StandardDev][g], (int)(s->dep_hist[Best][g]),
         s->node_hist[Average][g], s->node_hist[StandardDev][g], (int)(s->node_hist[Best][g]), gpops, duration);
@@ -248,12 +249,14 @@ int evolve() {
                                             run.init_depth.min, run.init_depth.max,
                                             run.pop_size, run.term_prob);
     printf("Done\n");
-
+    printf("Number of nodes in hashtable: %d\n", curt->n_nodes);
 
     if (0) print_population(population, run.pop_size, 0, 0);
     
-    tree **new_pop = (tree **)malloc(sizeof(tree *) * run.pop_size);
-    tree **best_trees = (tree **)malloc(sizeof(tree *) * elitism_n);
+    //tree **new_pop = (tree **)malloc(sizeof(tree *) * run.pop_size);
+    //tree **best_trees = (tree **)malloc(sizeof(tree *) * elitism_n);
+    tree **new_pop = NULL;
+    tree **best_trees = NULL;
 
     if (ENABLE_CACHE) {
         if (debug) {
@@ -273,6 +276,10 @@ int evolve() {
     gen_duration = ((double) (clock() - gen_start)) / CLOCKS_PER_SEC;
     print_gen_statistics(population, gen_duration);
 
+    // printf("Size of hashtable: %d\n", curt->size);
+    // printf("Number of nodes in hashtable: %d\n", curt->n_nodes);
+    // print_dag_table(curt->table, curt->size);
+
     //run for generations (only stop criteria for now)
     for(run.cur_gen = 1; run.cur_gen < run.generations; run.cur_gen++) {
 
@@ -288,6 +295,7 @@ int evolve() {
             print_population(best_trees, elitism_n, run.cur_gen, 0);
         }
 
+        new_pop = (tree **)malloc(sizeof(tree *) * run.pop_size);
         for(int i = 0; i < elitism_n; ++i) {
             if (PDEBUG) printf("Inserting elitist individuals in new generation\n");
             new_pop[i] = copy_tree(best_trees[i], newt);
@@ -303,6 +311,7 @@ int evolve() {
             tree *indiv = NULL;
             while ((depth > run.allowed_depth.max || depth < run.allowed_depth.min) && retries < run.max_retries) {
                 
+                free(indiv);
                 parent1 = tournament(population);
 
                 printfd("\nParent 1: ");
@@ -362,13 +371,34 @@ int evolve() {
         // switch populations
         tree **tempp = population;
         population = new_pop;
-        new_pop = tempp;
+        free_population(tempp, run.pop_size);
+        //new_pop = tempp;
+        
+        free(best_trees);
+
     }
 
     double engine_dur = ((double) (clock() - engine_start)) / CLOCKS_PER_SEC;
-    printf("\nBest individual (fitness %.3f): %s\n", population[run.best_ind_gen]->fitness, get_dag_expr(population[run.best_ind_gen]->dag));
+    char *temp_str = get_dag_expr(population[run.best_ind_gen]->dag);
+    printf("\nBest individual (fitness %.3f): %s\n", population[run.best_ind_gen]->fitness, temp_str);
+    free(temp_str);
+    //printf("\nBest individual (fitness %.3f):\n", population[run.best_ind_gen]->fitness);
+
     printf("\nTotal engine time: %.3fs\n\n", engine_dur);
 
+    free_hashtable(curt);
+    free_population(population, run.pop_size);
+    //free(population);
+    //free(new_pop);
 
     return 0;
+}
+
+
+void free_population(tree **population, uint32_t pop_size) {
+    for (int i = 0; i < pop_size; ++i) {
+        free(population[i]);
+        population[i] = NULL;
+    }
+    free(population);
 }
